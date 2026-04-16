@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+import json
+import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
+from .models import NvMBlock
+
+
+class NvMConfigParser:
+    """Parses JSON or Excel NvM block input into NvMBlock objects."""
+
+    REQUIRED_FIELDS = {
+        "block_name",
+        "block_id",
+        "block_size",
+        "ram_block_name",
+        "device",
+        "block_management_type",
+        "use_crc",
+        "crc_type",
+        "write_protection",
+    }
+
+    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+        self.logger = logger or logging.getLogger(self.__class__.__name__)
+
+    def parse_file(self, input_path: Union[str, Path]) -> List[NvMBlock]:
+        path = Path(input_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Input file not found: {path}")
+
+        if path.suffix.lower() == ".json":
+            records = self._read_json(path)
+        elif path.suffix.lower() in {".xlsx", ".xlsm"}:
+            records = self._read_excel(path)
+        else:
+            raise ValueError("Unsupported input file. Use .json, .xlsx, or .xlsm.")
+
+        blocks = [self._record_to_block(record, index) for index, record in enumerate(records, start=1)]
+        self._validate_unique_ids(blocks)
+
+        for block in blocks:
+            if block.block_id < 2:
+                self.logger.warning(
+                    "Block '%s' uses block_id=%s. AUTOSAR typically reserves 0 and 1.",
+                    block.block_name,
+                    block.block_id,
+                )
+
+        sorted_blocks = sorted(blocks, key=lambda block: block.block_id)
+        self.logger.info("Parsed %d NvM block(s) from %s.", len(sorted_blocks), path)
+        return sorted_blocks
+
+    def _record_to_block(self, record: Dict[str, Any], index: int) -> NvMBlock:
+        missing = sorted(self.REQUIRED_FIELDS - set(record))
+        if missing:
+            raise ValueError(f"Record {index} is missing required fields: {', '.join(missing)}")
+
+        try:
+            return NvMBlock.from_mapping(record)
+        except Exception as exc:  # noqa: BLE001 - keep parser error messages user friendly
+            raise ValueError(f"Invalid NvM block in record {index}: {exc}") from exc
+
+    def _read_json(self, path: Path) -> List[Dict[str, Any]]:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+
+        if isinstance(payload, list):
+            records = payload
+        elif isinstance(payload, dict) and isinstance(payload.get("blocks"), list):
+            records = payload["blocks"]
+        else:
+            raise ValueError("JSON input must be a list of blocks or an object with a 'blocks' list.")
+
+        if not records:
+            raise ValueError("Input does not contain any NvM blocks.")
+
+        return [dict(record) for record in records]
+
+    def _read_excel(self, path: Path) -> List[Dict[str, Any]]:
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise RuntimeError(
+                "Excel input requires openpyxl. Install it with 'pip install openpyxl'."
+            ) from exc
+
+        workbook = load_workbook(filename=path, read_only=True, data_only=True)
+        worksheet = workbook.active
+        rows = worksheet.iter_rows(values_only=True)
+
+        try:
+            headers = next(rows)
+        except StopIteration as exc:
+            raise ValueError("Excel input is empty.") from exc
+
+        normalized_headers = [self._normalize_header(header) for header in headers]
+        missing = sorted(self.REQUIRED_FIELDS - set(normalized_headers))
+        if missing:
+            raise ValueError(
+                "Excel header row is missing required columns: " + ", ".join(missing)
+            )
+
+        records: List[Dict[str, Any]] = []
+        for row in rows:
+            if row is None or all(cell in (None, "") for cell in row):
+                continue
+
+            record = {
+                normalized_headers[position]: cell
+                for position, cell in enumerate(row)
+                if position < len(normalized_headers) and normalized_headers[position]
+            }
+            records.append(record)
+
+        if not records:
+            raise ValueError("Excel input does not contain any NvM blocks.")
+
+        return records
+
+    def _validate_unique_ids(self, blocks: List[NvMBlock]) -> None:
+        seen: Dict[int, str] = {}
+        for block in blocks:
+            existing = seen.get(block.block_id)
+            if existing is not None:
+                raise ValueError(
+                    f"Duplicate block_id {block.block_id} found for '{existing}' and '{block.block_name}'."
+                )
+            seen[block.block_id] = block.block_name
+
+    @staticmethod
+    def _normalize_header(header: Any) -> str:
+        if header is None:
+            return ""
+        normalized = str(header).strip().lower().replace(" ", "_").replace("-", "_")
+        return normalized
