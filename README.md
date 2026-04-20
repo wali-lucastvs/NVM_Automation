@@ -1,6 +1,5 @@
 # AUTOSAR NvM Automation Tool
-This is new branch
-Author : S M Wali Haider Zaidi
+Author and Owner : S M Wali Haider Zaidi
 
 This workspace contains a Python-based generator for AUTOSAR NvM configuration artifacts:
 
@@ -19,9 +18,9 @@ python generate_nvm.py samples/nvm_blocks.json --output output --verbose
 ```
 
 Excel input is also supported:
-
+python generate_nvm.py samples/<NAME_OF_EXCEL_FILE>.xlsx --output output
 ```powershell
-python generate_nvm.py samples/nvm_blocks.xlsx --output output
+python generate_nvm.py samples/NVM_Data.xlsx --output output
 ```
 
 If you use Excel input, install:

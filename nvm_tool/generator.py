@@ -27,6 +27,8 @@ class NvMGenerator:
 
     def generate(self, output_dir: Union[str, Path]) -> None:
         destination = Path(output_dir)
+        if destination.exists() and not destination.is_dir():
+            raise ValueError(f"Output path must be a directory: {destination}")
         destination.mkdir(parents=True, exist_ok=True)
 
         files = {

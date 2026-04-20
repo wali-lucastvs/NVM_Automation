@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
 from nvm_tool import NvMConfigParser, NvMGenerator
@@ -49,22 +50,35 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     argument_parser = build_argument_parser()
+    # Show help if the user provides no arguments
+    if len(sys.argv) == 1:
+        argument_parser.print_help()
+        return 0
+
     args = argument_parser.parse_args()
 
     configure_logging(args.verbose)
     logger = logging.getLogger("nvm_generator")
 
-    parser = NvMConfigParser(logger=logger)
-    blocks = parser.parse_file(args.input)
+    try:
+        parser = NvMConfigParser(logger=logger)
+        blocks = parser.parse_file(args.input)
 
-    generator = NvMGenerator(
-        blocks=blocks,
-        logger=logger,
-        module_short_name=args.module_short_name,
-        config_short_name=args.config_short_name,
-        schema_file=args.schema_file,
-    )
-    generator.generate(args.output)
+        generator = NvMGenerator(
+            blocks=blocks,
+            logger=logger,
+            module_short_name=args.module_short_name,
+            config_short_name=args.config_short_name,
+            schema_file=args.schema_file,
+        )
+        generator.generate(args.output)
+    except (FileNotFoundError, ValueError, RuntimeError) as exc:
+        logger.error(str(exc))
+        return 1
+    except Exception:
+        logger.exception("An unexpected error occurred during generation.")
+        return 1
+
     return 0
 
 
