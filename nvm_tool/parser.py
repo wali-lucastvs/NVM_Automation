@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Mapping, Optional, Union
 
 from .models import NvMBlock
 
@@ -30,6 +30,8 @@ class NvMConfigParser:
         path = Path(input_path)
         if not path.exists():
             raise FileNotFoundError(f"Input file not found: {path}")
+        if path.is_dir():
+            raise ValueError(f"Input path must be a file, not a directory: {path}")
 
         if path.suffix.lower() == ".json":
             records = self._read_json(path)
@@ -40,6 +42,7 @@ class NvMConfigParser:
 
         blocks = [self._record_to_block(record, index) for index, record in enumerate(records, start=1)]
         self._validate_unique_ids(blocks)
+        self._validate_unique_generated_names(blocks)
 
         for block in blocks:
             if block.block_id < 2:
@@ -64,7 +67,12 @@ class NvMConfigParser:
             raise ValueError(f"Invalid NvM block in record {index}: {exc}") from exc
 
     def _read_json(self, path: Path) -> List[Dict[str, Any]]:
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Invalid JSON in {path}: {exc.msg} at line {exc.lineno}, column {exc.colno}."
+            ) from exc
 
         if isinstance(payload, list):
             records = payload
@@ -76,7 +84,13 @@ class NvMConfigParser:
         if not records:
             raise ValueError("Input does not contain any NvM blocks.")
 
-        return [dict(record) for record in records]
+        normalized_records: List[Dict[str, Any]] = []
+        for index, record in enumerate(records, start=1):
+            if not isinstance(record, Mapping):
+                raise ValueError(f"Record {index} must be a JSON object.")
+            normalized_records.append(dict(record))
+
+        return normalized_records
 
     def _read_excel(self, path: Path) -> List[Dict[str, Any]]:
         try:
@@ -87,37 +101,47 @@ class NvMConfigParser:
             ) from exc
 
         workbook = load_workbook(filename=path, read_only=True, data_only=True)
-        worksheet = workbook.active
-        rows = worksheet.iter_rows(values_only=True)
-
         try:
-            headers = next(rows)
-        except StopIteration as exc:
-            raise ValueError("Excel input is empty.") from exc
+            worksheet = workbook.active
+            rows = worksheet.iter_rows(values_only=True)
 
-        normalized_headers = [self._normalize_header(header) for header in headers]
-        missing = sorted(self.REQUIRED_FIELDS - set(normalized_headers))
-        if missing:
-            raise ValueError(
-                "Excel header row is missing required columns: " + ", ".join(missing)
-            )
+            try:
+                headers = next(rows)
+            except StopIteration as exc:
+                raise ValueError("Excel input is empty.") from exc
 
-        records: List[Dict[str, Any]] = []
-        for row in rows:
-            if row is None or all(cell in (None, "") for cell in row):
-                continue
+            normalized_headers = [self._normalize_header(header) for header in headers]
+            missing = sorted(self.REQUIRED_FIELDS - set(normalized_headers))
+            if missing:
+                raise ValueError(
+                    "Excel header row is missing required columns: " + ", ".join(missing)
+                )
 
-            record = {
-                normalized_headers[position]: cell
-                for position, cell in enumerate(row)
-                if position < len(normalized_headers) and normalized_headers[position]
-            }
-            records.append(record)
+            duplicate_headers = self._find_duplicate_headers(normalized_headers)
+            if duplicate_headers:
+                raise ValueError(
+                    "Excel header row contains duplicate columns after normalization: "
+                    + ", ".join(duplicate_headers)
+                )
 
-        if not records:
-            raise ValueError("Excel input does not contain any NvM blocks.")
+            records: List[Dict[str, Any]] = []
+            for row in rows:
+                if row is None or all(cell in (None, "") for cell in row):
+                    continue
 
-        return records
+                record = {
+                    normalized_headers[position]: cell
+                    for position, cell in enumerate(row)
+                    if position < len(normalized_headers) and normalized_headers[position]
+                }
+                records.append(record)
+
+            if not records:
+                raise ValueError("Excel input does not contain any NvM blocks.")
+
+            return records
+        finally:
+            workbook.close()
 
     def _validate_unique_ids(self, blocks: List[NvMBlock]) -> None:
         seen: Dict[int, str] = {}
@@ -128,6 +152,47 @@ class NvMConfigParser:
                     f"Duplicate block_id {block.block_id} found for '{existing}' and '{block.block_name}'."
                 )
             seen[block.block_id] = block.block_name
+
+    def _validate_unique_generated_names(self, blocks: List[NvMBlock]) -> None:
+        self._validate_unique_strings(
+            blocks,
+            lambda block: block.block_id_macro,
+            "generated block ID macro",
+        )
+        self._validate_unique_strings(
+            blocks,
+            lambda block: block.short_name,
+            "generated AUTOSAR short name",
+        )
+
+    @staticmethod
+    def _validate_unique_strings(
+        blocks: List[NvMBlock],
+        selector: Callable[[NvMBlock], str],
+        label: str,
+    ) -> None:
+        seen: Dict[str, str] = {}
+        for block in blocks:
+            value = selector(block)
+            existing = seen.get(value)
+            if existing is not None:
+                raise ValueError(
+                    f"Block names '{existing}' and '{block.block_name}' collide on the {label} "
+                    f"'{value}'. Rename one of the blocks."
+                )
+            seen[value] = block.block_name
+
+    @staticmethod
+    def _find_duplicate_headers(headers: List[str]) -> List[str]:
+        seen = set()
+        duplicates = set()
+        for header in headers:
+            if not header:
+                continue
+            if header in seen:
+                duplicates.add(header)
+            seen.add(header)
+        return sorted(duplicates)
 
     @staticmethod
     def _normalize_header(header: Any) -> str:

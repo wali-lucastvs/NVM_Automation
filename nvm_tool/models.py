@@ -6,6 +6,7 @@ from typing import Any, Mapping, Optional, Tuple
 
 
 _C_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_INTEGER_STRING_PATTERN = re.compile(r"^[+-]?\d+$")
 
 
 def _normalize_short_name(value: str) -> str:
@@ -45,6 +46,26 @@ def _as_bool(value: Any, field_name: str) -> bool:
             return False
 
     raise ValueError(f"{field_name} must be a boolean-compatible value.")
+
+
+def _as_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an integer value.")
+
+    if isinstance(value, int):
+        return value
+
+    if isinstance(value, float):
+        if value.is_integer():
+            return int(value)
+        raise ValueError(f"{field_name} must be an integer value.")
+
+    if isinstance(value, str):
+        normalized = value.strip()
+        if _INTEGER_STRING_PATTERN.match(normalized):
+            return int(normalized)
+
+    raise ValueError(f"{field_name} must be an integer value.")
 
 
 @dataclass(frozen=True)
@@ -135,8 +156,8 @@ class NvMBlock:
 
         return cls(
             block_name=str(record["block_name"]),
-            block_id=int(record["block_id"]),
-            block_size=int(record["block_size"]),
+            block_id=_as_int(record["block_id"], "block_id"),
+            block_size=_as_int(record["block_size"], "block_size"),
             ram_block_name=str(record["ram_block_name"]),
             device=str(record["device"]),
             block_management_type=str(record["block_management_type"]),
@@ -144,15 +165,19 @@ class NvMBlock:
             crc_type=str(record.get("crc_type", "CRC16")),
             write_protection=_as_bool(record["write_protection"], "write_protection"),
             device_id=(
-                int(record["device_id"]) if record.get("device_id") not in (None, "") else None
+                _as_int(record["device_id"], "device_id")
+                if record.get("device_id") not in (None, "")
+                else None
             ),
             nv_block_base_number=(
-                int(record["nv_block_base_number"])
+                _as_int(record["nv_block_base_number"], "nv_block_base_number")
                 if record.get("nv_block_base_number") not in (None, "")
                 else None
             ),
             nv_block_num=(
-                int(record["nv_block_num"]) if record.get("nv_block_num") not in (None, "") else None
+                _as_int(record["nv_block_num"], "nv_block_num")
+                if record.get("nv_block_num") not in (None, "")
+                else None
             ),
         )
 
