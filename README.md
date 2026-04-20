@@ -1,6 +1,5 @@
 # AUTOSAR NvM Automation Tool
-This is new branch
-Author : S M Wali Haider Zaidi
+Author and Owner : S M Wali Haider Zaidi
 
 This workspace contains a Python-based generator for AUTOSAR NvM configuration artifacts:
 
