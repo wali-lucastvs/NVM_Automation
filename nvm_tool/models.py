@@ -425,7 +425,7 @@ class NvMBlock:
 
     @property
     def bool_c_literal(self) -> Tuple[str, str]:
-        return ("TRUE" if self.use_crc else "FALSE", "TRUE" if self.write_protection else "FALSE")
+        return ("true" if self.use_crc else "false", "true" if self.write_protection else "false")
 
     @property
     def autosar_use_crc_value(self) -> str:

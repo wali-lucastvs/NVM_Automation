@@ -68,6 +68,8 @@ class NvMGenerator:
             "#define NVM_CFG_H",
             "",
             '#include "Std_Types.h"',
+            '#include <stdint.h> /* For uint8_t, uint16_t */',
+            '#include <stdbool.h> /* For bool, true, false */',
             "",
             "#ifdef __cplusplus",
             'extern "C" {',
@@ -96,14 +98,14 @@ class NvMGenerator:
             "",
             "typedef struct",
             "{",
-            "    uint16 BlockId;",
-            "    uint16 BlockLength;",
-            "    uint8* RamBlockDataAddress;",
+            "    uint16_t BlockId;",
+            "    uint16_t BlockLength;",
+            "    uint8_t* RamBlockDataAddress;",
             "    NvM_DeviceType DeviceId;",
             "    NvM_BlockManagementTypeType BlockManagementType;",
-            "    boolean BlockUseCrc;",
+            "    bool BlockUseCrc;",
             "    NvM_CrcType BlockCrcType;",
-            "    boolean WriteProtection;",
+            "    bool WriteProtection;",
             "} NvM_BlockDescriptorType;",
             "",
             "/* Number of merged NvM blocks. */",
@@ -142,7 +144,7 @@ class NvMGenerator:
         ]
 
         for block in blocks:
-            lines.append(f"extern uint8 {block.ram_block_name}[{block.block_size}u];")
+            lines.append(f"extern uint8_t {block.ram_block_name}[{block.block_size}u];")
 
         lines.extend(
             [

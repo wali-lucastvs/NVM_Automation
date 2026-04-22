@@ -9,7 +9,7 @@
           <DEFINITION-REF DEST="ECUC-MODULE-DEF">/AUTOSAR/EcucDefs/NvM</DEFINITION-REF>
           <CONTAINERS>
             <ECUC-CONTAINER-VALUE>
-              <SHORT-NAME>LegacyBlock</SHORT-NAME>
+              <SHORT-NAME>WaliBlock</SHORT-NAME>
               <DEFINITION-REF DEST="ECUC-PARAM-CONF-CONTAINER-DEF">/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor</DEFINITION-REF>
               <PARAMETER-VALUES>
                 <ECUC-NUMERICAL-PARAM-VALUE>

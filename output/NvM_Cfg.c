@@ -6,10 +6,9 @@
 #include "NvM_Cfg.h"
 
 /* External RAM block buffers configured for permanent RAM usage. */
-extern uint8 Ram_EngineSettings[64u];
-extern uint8 Ram_OdometerMirror[16u];
-extern uint8 Ram_DiagnosticSnapshot[128u];
-extern uint8 Ram_LegacyBlock[8u];
+extern uint8_t Ram_OdometerMirror[16u];
+extern uint8_t Ram_DiagnosticSnapshot[128u];
+extern uint8_t Ram_EngineSettings[64u];
 
 /*
  * Merged NvM block descriptor table.
@@ -17,17 +16,6 @@ extern uint8 Ram_LegacyBlock[8u];
  */
 const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
 {
-    /* EngineSettings: block ID 2, FEE, NATIVE, CRC16 */
-    {
-        .BlockId = NVM_BLOCK_ID_ENGINE_SETTINGS,
-        .BlockLength = 64u,
-        .RamBlockDataAddress = Ram_EngineSettings,
-        .DeviceId = NVM_DEVICE_FEE,
-        .BlockManagementType = NVM_BLOCK_NATIVE,
-        .BlockUseCrc = TRUE,
-        .BlockCrcType = NVM_CRC16,
-        .WriteProtection = FALSE
-    },
     /* OdometerMirror: block ID 3, EA, REDUNDANT, CRC32 */
     {
         .BlockId = NVM_BLOCK_ID_ODOMETER_MIRROR,
@@ -35,9 +23,9 @@ const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
         .RamBlockDataAddress = Ram_OdometerMirror,
         .DeviceId = NVM_DEVICE_EA,
         .BlockManagementType = NVM_BLOCK_REDUNDANT,
-        .BlockUseCrc = TRUE,
+        .BlockUseCrc = true,
         .BlockCrcType = NVM_CRC32,
-        .WriteProtection = TRUE
+        .WriteProtection = true
     },
     /* DiagnosticSnapshot: block ID 4, FEE, DATASET, NO_CRC */
     {
@@ -46,19 +34,19 @@ const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
         .RamBlockDataAddress = Ram_DiagnosticSnapshot,
         .DeviceId = NVM_DEVICE_FEE,
         .BlockManagementType = NVM_BLOCK_DATASET,
-        .BlockUseCrc = FALSE,
+        .BlockUseCrc = false,
         .BlockCrcType = NVM_CRC_NONE,
-        .WriteProtection = FALSE
+        .WriteProtection = false
     },
-    /* LegacyBlock: block ID 10, FEE, NATIVE, CRC16 */
+    /* EngineSettings: block ID 10, FEE, NATIVE, CRC16 */
     {
-        .BlockId = NVM_BLOCK_ID_LEGACY_BLOCK,
-        .BlockLength = 8u,
-        .RamBlockDataAddress = Ram_LegacyBlock,
+        .BlockId = NVM_BLOCK_ID_ENGINE_SETTINGS,
+        .BlockLength = 64u,
+        .RamBlockDataAddress = Ram_EngineSettings,
         .DeviceId = NVM_DEVICE_FEE,
         .BlockManagementType = NVM_BLOCK_NATIVE,
-        .BlockUseCrc = TRUE,
+        .BlockUseCrc = true,
         .BlockCrcType = NVM_CRC16,
-        .WriteProtection = FALSE
+        .WriteProtection = false
     }
 };
