@@ -117,6 +117,8 @@ class ParsedArxmlDocument:
     module_configuration: ET.Element
     containers_element: Optional[ET.Element]
     blocks: list["NvMBlock"]
+    block_id_locations: dict[int, str]
+    short_name_locations: dict[str, str]
 
 
 @dataclass(frozen=True)

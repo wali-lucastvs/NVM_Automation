@@ -49,7 +49,7 @@ class NvMGenerator:
 
         for block in merged_blocks:
             self.logger.info(
-                "Merged block '%s' (ID=%s, device=%s, management=%s).",
+                "Output block '%s' (ID=%s, device=%s, management=%s).",
                 block.block_name,
                 block.block_id,
                 block.device,
@@ -151,7 +151,7 @@ class NvMGenerator:
                 "",
                 "/*",
                 " * Merged NvM block descriptor table.",
-                " * Existing blocks from the previous ARXML are preserved unless updated by the new input.",
+                " * Existing blocks from the previous ARXML are preserved and new blocks are appended.",
                 " */",
                 "const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =",
                 "{",
@@ -189,38 +189,34 @@ class NvMGenerator:
             "CONTAINERS",
             self.previous_document.namespace,
         )
-        existing_containers = self._index_block_containers(containers_element)
+        self._index_block_containers(containers_element)
 
         merged_blocks_by_id: Dict[int, NvMBlock] = {
             block.block_id: block for block in self.previous_document.blocks
         }
-        short_name_to_id: Dict[str, int] = {
-            block.short_name: block.block_id for block in self.previous_document.blocks
-        }
 
         for block in self.blocks:
-            existing_block_id = short_name_to_id.get(block.short_name)
-            if existing_block_id is not None and existing_block_id != block.block_id:
+            existing_id_location = self.previous_document.block_id_locations.get(block.block_id)
+            if existing_id_location is not None:
                 raise ValueError(
-                    f"Cannot merge block '{block.block_name}' because ARXML SHORT-NAME "
-                    f"'{block.short_name}' already belongs to block_id {existing_block_id}."
+                    f"Duplicate block ID {block.block_id} found at {existing_id_location}. "
+                    f"New input block '{block.block_name}' uses the same ID. "
+                    "Automatic modification of an existing ARXML block ID is disabled."
                 )
 
-            if block.block_id in existing_containers:
-                self.logger.info("Updating existing NvM block ID %s in previous ARXML.", block.block_id)
-                self._update_block_container(
-                    existing_containers[block.block_id],
-                    block,
-                    self.previous_document.namespace,
-                )
-            else:
-                self.logger.info("Appending new NvM block ID %s to previous ARXML.", block.block_id)
-                containers_element.append(
-                    self._build_block_container(block, self.previous_document.namespace)
+            existing_name_location = self.previous_document.short_name_locations.get(block.short_name)
+            if existing_name_location is not None:
+                raise ValueError(
+                    f"Duplicate block name '{block.short_name}' found at {existing_name_location}. "
+                    f"New input block '{block.block_name}' uses the same name. "
+                    "Automatic modification of an existing ARXML block name is disabled."
                 )
 
+            self.logger.info("Appending new NvM block ID %s to previous ARXML.", block.block_id)
+            containers_element.append(
+                self._build_block_container(block, self.previous_document.namespace)
+            )
             merged_blocks_by_id[block.block_id] = block
-            short_name_to_id[block.short_name] = block.block_id
 
         merged_blocks = sorted(merged_blocks_by_id.values(), key=lambda item: item.block_id)
         self._validate_merged_short_names(merged_blocks)
@@ -230,45 +226,6 @@ class NvMGenerator:
         tree = ET.ElementTree(root)
         ET.indent(tree, space="  ")
         return merged_blocks, ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8") + "\n"
-
-    def _update_block_container(
-        self,
-        container: ET.Element,
-        block: NvMBlock,
-        namespace: str,
-    ) -> None:
-        short_name_element = self._ensure_direct_child(container, "SHORT-NAME", namespace)
-        short_name_element.text = block.short_name
-
-        definition_ref = self._ensure_direct_child(container, "DEFINITION-REF", namespace)
-        definition_ref.set("DEST", "ECUC-PARAM-CONF-CONTAINER-DEF")
-        definition_ref.text = NVM_BLOCK_CONTAINER_DEFINITION_REF
-
-        parameter_values = self._ensure_direct_child(container, "PARAMETER-VALUES", namespace)
-        parameter_elements = self._index_parameter_elements(parameter_values, block.short_name)
-        desired_values = block.autosar_parameter_values()
-
-        for definition in NvMBlock.STANDARD_PARAMETER_DEFINITIONS:
-            if definition.definition_ref == NVM_BLOCK_CRC_TYPE_DEFINITION_REF and not block.use_crc:
-                self._remove_parameter(parameter_values, parameter_elements, definition.definition_ref)
-                continue
-
-            value = desired_values.get(definition.definition_ref)
-            if value is None:
-                continue
-            parameter_element = parameter_elements.get(definition.definition_ref)
-            if parameter_element is None:
-                parameter_element = ET.SubElement(
-                    parameter_values,
-                    self._tag(
-                        "ECUC-NUMERICAL-PARAM-VALUE"
-                        if definition.value_kind == "numerical"
-                        else "ECUC-TEXTUAL-PARAM-VALUE",
-                        namespace,
-                    ),
-                )
-                parameter_elements[definition.definition_ref] = parameter_element
-            self._write_parameter_value(parameter_element, definition, value, namespace)
 
     def _build_block_container(self, block: NvMBlock, namespace: str) -> ET.Element:
         container = ET.Element(self._tag("ECUC-CONTAINER-VALUE", namespace))
@@ -359,37 +316,6 @@ class NvMGenerator:
         raise ValueError(
             f"Previous ARXML block '{short_name}' is missing NvMNvramBlockIdentifier."
         )
-
-    def _index_parameter_elements(
-        self,
-        parameter_values: ET.Element,
-        short_name: str,
-    ) -> Dict[str, ET.Element]:
-        indexed_parameters: Dict[str, ET.Element] = {}
-        for parameter in parameter_values:
-            definition_ref = self._find_direct_child(parameter, "DEFINITION-REF")
-            if definition_ref is None:
-                continue
-            definition_ref_text = (definition_ref.text or "").strip()
-            if not definition_ref_text:
-                continue
-            if definition_ref_text in indexed_parameters:
-                raise ValueError(
-                    f"Previous ARXML block '{short_name}' contains duplicate parameter "
-                    f"'{definition_ref_text}'."
-                )
-            indexed_parameters[definition_ref_text] = parameter
-        return indexed_parameters
-
-    @staticmethod
-    def _remove_parameter(
-        parameter_values: ET.Element,
-        parameter_elements: Dict[str, ET.Element],
-        definition_ref: str,
-    ) -> None:
-        parameter_element = parameter_elements.pop(definition_ref, None)
-        if parameter_element is not None:
-            parameter_values.remove(parameter_element)
 
     @staticmethod
     def _validate_merged_short_names(blocks: List[NvMBlock]) -> None:

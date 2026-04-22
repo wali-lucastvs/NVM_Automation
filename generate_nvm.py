@@ -15,7 +15,7 @@ def configure_logging(verbose: bool) -> None:
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Merge new NvM block input into a previous AUTOSAR NvM ARXML and generate C artifacts."
+        description="Append validated NvM block input to a previous AUTOSAR NvM ARXML and generate C artifacts."
     )
     parser.add_argument(
         "--input-type",
@@ -58,35 +58,18 @@ def main() -> int:
     args = argument_parser.parse_args()
     configure_logging(args.verbose)
     logger = logging.getLogger("nvm_generator")
-    
-    input_path = args.input_file or args.input_file_alt
-    if not input_path:
-        logger.error("No input file provided.")
-        return 1
-
-    # Auto-detect logic for "Sample" folder workflow
-    output_dir = args.output or input_path.parent
-    prev_arxml = args.previous_arxml
-    if not prev_arxml:
-        potential_prev = input_path.parent / "NvM.arxml"
-        if potential_prev.exists():
-            prev_arxml = potential_prev
-            logger.info("Auto-detected previous ARXML at: %s", prev_arxml)
-        else:
-            logger.error("No previous ARXML found. Use --previous-arxml to specify one.")
-            return 1
 
     try:
         parser = NvMConfigParser(logger=logger)
-        input_blocks = parser.parse_file(input_path)
-        previous_document = parser.parse_previous_arxml(prev_arxml)
+        input_blocks = parser.parse_input_file(args.input_type, args.input_file)
+        previous_document = parser.parse_previous_arxml(args.previous_arxml)
 
         generator = NvMGenerator(
             blocks=input_blocks,
             previous_document=previous_document,
             logger=logger,
         )
-        generator.generate(output_dir)
+        generator.generate(args.output)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
         logger.error(str(exc))
         return 1
