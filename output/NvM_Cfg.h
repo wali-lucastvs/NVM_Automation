@@ -8,6 +8,8 @@
 #define NVM_CFG_H
 
 #include "Std_Types.h"
+#include <stdint.h> /* For uint8_t, uint16_t */
+#include <stdbool.h> /* For bool, true, false */
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,23 +38,23 @@ typedef enum
 
 typedef struct
 {
-    uint16 BlockId;
-    uint16 BlockLength;
-    uint8* RamBlockDataAddress;
+    uint16_t BlockId;
+    uint16_t BlockLength;
+    uint8_t* RamBlockDataAddress;
     NvM_DeviceType DeviceId;
     NvM_BlockManagementTypeType BlockManagementType;
-    boolean BlockUseCrc;
+    bool BlockUseCrc;
     NvM_CrcType BlockCrcType;
-    boolean WriteProtection;
+    bool WriteProtection;
 } NvM_BlockDescriptorType;
 
-/* Number of generated NvM blocks. */
+/* Number of merged NvM blocks. */
 #define NVM_NUMBER_OF_BLOCKS (3u)
 
 /* Symbolic block identifiers. */
-#define NVM_BLOCK_ID_ENGINE_SETTINGS (2u)
 #define NVM_BLOCK_ID_ODOMETER_MIRROR (3u)
 #define NVM_BLOCK_ID_DIAGNOSTIC_SNAPSHOT (4u)
+#define NVM_BLOCK_ID_ENGINE_SETTINGS (20u)
 
 extern const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS];
 

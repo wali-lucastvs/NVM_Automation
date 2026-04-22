@@ -2,8 +2,8 @@
   "blocks": [
     {
       "block_name": "EngineSettings",
-      "block_id": 2,
-      "block_size": 64,
+      "block_id":20,
+      "block_size": 128,
       "ram_block_name": "Ram_EngineSettings",
       "device": "FEE",
       "block_management_type": "NATIVE",
@@ -14,7 +14,7 @@
     {
       "block_name": "OdometerMirror",
       "block_id": 3,
-      "block_size": 16,
+      "block_size": 32,
       "ram_block_name": "Ram_OdometerMirror",
       "device": "EA",
       "block_management_type": "REDUNDANT",
@@ -25,7 +25,7 @@
     {
       "block_name": "DiagnosticSnapshot",
       "block_id": 4,
-      "block_size": 128,
+      "block_size": 64,
       "ram_block_name": "Ram_DiagnosticSnapshot",
       "device": "FEE",
       "block_management_type": "DATASET",

@@ -15,61 +15,67 @@ def configure_logging(verbose: bool) -> None:
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Generate AUTOSAR NvM configuration files from JSON or Excel input."
+        description="Generate AUTOSAR NvM configuration artifacts from JSON or Excel input, optionally merging with a previous NvM.arxml file."
     )
-    parser.add_argument("input", type=Path, help="Path to the JSON or Excel input file.")
     parser.add_argument(
-        "-o",
+        "--input-type",
+        required=True,
+        choices=("json", "excel"),
+        help="Select the primary input source format.",
+    )
+    parser.add_argument(
+        "--input-file",
+        required=True,
+        type=Path,
+        help="Path to the JSON or Excel NvM block input file.",
+    )
+    parser.add_argument(
+        "--previous-arxml",
+        required=False,
+        type=Path,
+        help="Path to the previous NvM.arxml file used as the merge base.",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("output"),
-        help="Directory where NvM_Cfg.c, NvM_Cfg.h, and NvM.arxml are written.",
-    )
-    parser.add_argument(
-        "--module-short-name",
-        default="NvM",
-        help="AUTOSAR package short name for the NvM module.",
-    )
-    parser.add_argument(
-        "--config-short-name",
-        default="NvM_Config",
-        help="AUTOSAR ECUC module configuration short name.",
-    )
-    parser.add_argument(
-        "--schema-file",
-        default="AUTOSAR_00049.xsd",
-        help="Schema file name written into the ARXML xsi:schemaLocation.",
+        help="Directory where NvM_Cfg.c, NvM_Cfg.h, and the merged NvM.arxml are written.",
     )
     parser.add_argument(
         "--verbose",
         action="store_true",
         help="Enable verbose logging while parsing and generating files.",
     )
+    parser.add_argument(
+        "--allow-update",
+        action="store_true",
+        help="Allow updating existing blocks with the same ID or name instead of rejecting them.",
+    )
     return parser
 
 
 def main() -> int:
     argument_parser = build_argument_parser()
-    # Show help if the user provides no arguments
     if len(sys.argv) == 1:
         argument_parser.print_help()
         return 0
 
     args = argument_parser.parse_args()
-
     configure_logging(args.verbose)
     logger = logging.getLogger("nvm_generator")
 
     try:
         parser = NvMConfigParser(logger=logger)
-        blocks = parser.parse_file(args.input)
+        input_blocks = parser.parse_input_file(args.input_type, args.input_file)
+        previous_document = None
+        if args.previous_arxml:
+            previous_document = parser.parse_previous_arxml(args.previous_arxml)
 
         generator = NvMGenerator(
-            blocks=blocks,
+            blocks=input_blocks,
+            previous_document=previous_document,
+            allow_update=args.allow_update,
             logger=logger,
-            module_short_name=args.module_short_name,
-            config_short_name=args.config_short_name,
-            schema_file=args.schema_file,
         )
         generator.generate(args.output)
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
