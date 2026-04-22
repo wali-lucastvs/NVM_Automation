@@ -49,13 +49,11 @@ typedef struct
 } NvM_BlockDescriptorType;
 
 /* Number of merged NvM blocks. */
-#define NVM_NUMBER_OF_BLOCKS (5u)
+#define NVM_NUMBER_OF_BLOCKS (3u)
 
 /* Symbolic block identifiers. */
-#define NVM_BLOCK_ID_WALI (2u)
-#define NVM_BLOCK_ID_HAIDER (3u)
-#define NVM_BLOCK_ID_ZAIDI (4u)
-#define NVM_BLOCK_ID_WALI_BLOCK (10u)
+#define NVM_BLOCK_ID_ODOMETER_MIRROR (3u)
+#define NVM_BLOCK_ID_DIAGNOSTIC_SNAPSHOT (4u)
 #define NVM_BLOCK_ID_ENGINE_SETTINGS (20u)
 
 extern const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS];
