@@ -8,11 +8,12 @@
 /* External RAM block buffers configured for permanent RAM usage. */
 extern uint8_t Ram_OdometerMirror[16u];
 extern uint8_t Ram_DiagnosticSnapshot[128u];
+extern uint8_t Ram_LegacyBlock[8u];
 extern uint8_t Ram_EngineSettings[64u];
 
 /*
  * Merged NvM block descriptor table.
- * Existing blocks from the previous ARXML are preserved unless updated by the new input.
+ * Existing blocks from the previous ARXML are preserved and new blocks are appended.
  */
 const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
 {
@@ -38,7 +39,18 @@ const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
         .BlockCrcType = NVM_CRC_NONE,
         .WriteProtection = false
     },
-    /* EngineSettings: block ID 10, FEE, NATIVE, CRC16 */
+    /* WaliBlock: block ID 10, FEE, NATIVE, CRC16 */
+    {
+        .BlockId = NVM_BLOCK_ID_WALI_BLOCK,
+        .BlockLength = 8u,
+        .RamBlockDataAddress = Ram_LegacyBlock,
+        .DeviceId = NVM_DEVICE_FEE,
+        .BlockManagementType = NVM_BLOCK_NATIVE,
+        .BlockUseCrc = true,
+        .BlockCrcType = NVM_CRC16,
+        .WriteProtection = false
+    },
+    /* EngineSettings: block ID 20, FEE, NATIVE, CRC16 */
     {
         .BlockId = NVM_BLOCK_ID_ENGINE_SETTINGS,
         .BlockLength = 64u,
