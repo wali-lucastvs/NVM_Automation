@@ -17,12 +17,12 @@ from .models import (
 
 
 class NvMGenerator:
-    """Merges NvM block definitions into an existing ARXML and generates C artifacts."""
+    """Generates NvM configuration artifacts and optionally merges into an existing ARXML."""
 
     def __init__(
         self,
         blocks: Iterable[NvMBlock],
-        previous_document: ParsedArxmlDocument,
+        previous_document: Optional[ParsedArxmlDocument] = None,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self.blocks = sorted(list(blocks), key=lambda block: block.block_id)
@@ -35,7 +35,11 @@ class NvMGenerator:
             raise ValueError(f"Output path must be a directory: {destination}")
         destination.mkdir(parents=True, exist_ok=True)
 
-        merged_blocks, merged_arxml = self._merge_blocks_into_previous_arxml()
+        if self.previous_document is not None:
+            merged_blocks, merged_arxml = self._merge_blocks_into_previous_arxml()
+        else:
+            merged_blocks, merged_arxml = self._generate_fresh_arxml()
+        
         files = {
             "NvM_Cfg.h": self.render_header(merged_blocks),
             "NvM_Cfg.c": self.render_source(merged_blocks),
@@ -180,6 +184,50 @@ class NvMGenerator:
 
         lines.extend(["};"])
         return "\n".join(lines) + "\n"
+
+    def _generate_fresh_arxml(self) -> Tuple[List[NvMBlock], str]:
+        """Generate a fresh ARXML from input blocks without merging."""
+        namespace = "http://autosar.org/schema/r4.0"
+        
+        # Create root element
+        root = ET.Element(self._tag("AUTOSAR", namespace))
+        root.set(self._tag("schemaLocation", "http://www.w3.org/2001/XMLSchema-instance"), 
+                 "http://autosar.org/schema/r4.0 AUTOSAR_4-0-2.xsd")
+        
+        # Create ARPackages element
+        ar_packages = ET.SubElement(root, self._tag("AR-PACKAGES", namespace))
+        
+        # Create NvM module configuration
+        module_config = ET.SubElement(ar_packages, self._tag("AR-PACKAGE", namespace))
+        ET.SubElement(module_config, self._tag("SHORT-NAME", namespace)).text = "NvM"
+        nvm_values = ET.SubElement(module_config, self._tag("ELEMENTS", namespace))
+        
+        module_configuration = ET.SubElement(
+            nvm_values,
+            self._tag("ECUC-MODULE-CONFIGURATION-VALUES", namespace)
+        )
+        
+        definition_ref = ET.SubElement(module_configuration, self._tag("DEFINITION-REF", namespace))
+        definition_ref.set("DEST", "ECUC-MODULE-DEF")
+        definition_ref.text = NVM_MODULE_DEFINITION_REF
+        
+        # Create CONTAINERS element
+        containers_element = ET.SubElement(module_configuration, self._tag("CONTAINERS", namespace))
+        
+        # Add all input blocks
+        for block in self.blocks:
+            self.logger.info("Adding NvM block ID %s to fresh ARXML.", block.block_id)
+            containers_element.append(self._build_block_container(block, namespace))
+        
+        merged_blocks = list(self.blocks)
+        self._validate_merged_short_names(merged_blocks)
+        
+        # Register namespaces and convert to string
+        ET.register_namespace("", namespace)
+        ET.register_namespace("xsi", AUTOSAR_XSI_NAMESPACE)
+        tree = ET.ElementTree(root)
+        ET.indent(tree, space="  ")
+        return merged_blocks, ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8") + "\n"
 
     def _merge_blocks_into_previous_arxml(self) -> Tuple[List[NvMBlock], str]:
         root = deepcopy(self.previous_document.root)

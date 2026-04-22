@@ -15,7 +15,7 @@ def configure_logging(verbose: bool) -> None:
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Append validated NvM block input to a previous AUTOSAR NvM ARXML and generate C artifacts."
+        description="Generate AUTOSAR NvM configuration artifacts from JSON or Excel input, optionally merging with a previous NvM.arxml file."
     )
     parser.add_argument(
         "--input-type",
@@ -31,7 +31,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--previous-arxml",
-        required=True,
+        required=False,
         type=Path,
         help="Path to the previous NvM.arxml file used as the merge base.",
     )
@@ -62,7 +62,9 @@ def main() -> int:
     try:
         parser = NvMConfigParser(logger=logger)
         input_blocks = parser.parse_input_file(args.input_type, args.input_file)
-        previous_document = parser.parse_previous_arxml(args.previous_arxml)
+        previous_document = None
+        if args.previous_arxml:
+            previous_document = parser.parse_previous_arxml(args.previous_arxml)
 
         generator = NvMGenerator(
             blocks=input_blocks,
