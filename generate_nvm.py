@@ -46,6 +46,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Enable verbose logging while parsing and generating files.",
     )
+    parser.add_argument(
+        "--allow-update",
+        action="store_true",
+        help="Allow updating existing blocks with the same ID or name instead of rejecting them.",
+    )
     return parser
 
 
@@ -69,6 +74,7 @@ def main() -> int:
         generator = NvMGenerator(
             blocks=input_blocks,
             previous_document=previous_document,
+            allow_update=args.allow_update,
             logger=logger,
         )
         generator.generate(args.output)

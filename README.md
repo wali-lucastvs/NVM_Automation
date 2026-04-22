@@ -109,8 +109,37 @@ python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --pre
 
 ---
 
+### 5. Update Existing Blocks (JSON Input with --allow-update)
 
-### 5. Specify Custom Output Directory
+Modify existing blocks in a previous ARXML by providing new block data with the same block ID:
+
+```powershell
+python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output --allow-update
+```
+
+```powershell
+python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output --allow-update --verbose
+```
+
+**Purpose:** Replaces existing blocks (matching by ID) with updated configurations instead of rejecting them.
+
+---
+
+### 6. Update Existing Blocks (Excel Input with --allow-update)
+
+```powershell
+python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --previous-arxml input/NvM.arxml --output output --allow-update
+```
+
+```powershell
+python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --previous-arxml input/NvM.arxml --output output --allow-update --verbose
+```
+
+---
+
+
+
+### 7. Specify Custom Output Directory
 
 All commands accept `--output` to customize where files are written (default: `output` folder):
 
@@ -120,7 +149,7 @@ python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --ou
 
 ---
 
-### 10. Display Help
+### 8. Display Help
 
 ```powershell
 python generate_nvm.py --help
@@ -278,10 +307,25 @@ BlockB     | 10       | 512        | Ram_BlockB     | EA      | REDUNDANT       
 
 ### Merge Validation Rules (when using `--previous-arxml`)
 
-- ✓ No duplicate `SHORT-NAME` values allowed between previous and new blocks
-- ✓ No duplicate `NvMNvramBlockIdentifier` values allowed between previous and new blocks
+- ✓ No duplicate `SHORT-NAME` values allowed between previous and new blocks (unless `--allow-update` is used)
+- ✓ No duplicate `NvMNvramBlockIdentifier` values allowed between previous and new blocks (unless `--allow-update` is used)
 - ✓ All previous blocks are preserved in exact order
 - ✓ New blocks are appended after previous blocks
+
+### Block Update Mode (`--allow-update` flag)
+
+When using `--allow-update` with `--previous-arxml`:
+
+- ✓ Blocks with matching IDs are **replaced** with the new definition
+- ✓ Blocks are replaced in-place (order preserved)
+- ✓ Blocks without a match in previous ARXML are **appended**
+- ✓ Useful for modifying existing block configurations without manual deletion
+
+**Example:**
+```powershell
+# Update existing block with ID 10, append new block with ID 20
+python generate_nvm.py --input-type excel --input-file input/updates.xlsx --previous-arxml output/NvM.arxml --output output --allow-update
+```
 
 ---
 
@@ -369,7 +413,20 @@ python generate_nvm.py --input-type json --input-file input/new_blocks.json --pr
 python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --output "C:\Projects\NvM_Config" --verbose
 ```
 
-### Workflow 4: Batch Processing Multiple Configurations
+### Workflow 4: Update Existing Blocks in Previous Configuration
+
+```powershell
+# Modify block properties in input file (same block ID)
+# Run with --allow-update to replace the old block
+
+python generate_nvm.py --input-type excel --input-file input/NVM_Data_Updated.xlsx --previous-arxml output/NvM.arxml --output output --allow-update --verbose
+```
+
+This will replace blocks with matching IDs while keeping other blocks intact.
+
+---
+
+### Workflow 5: Batch Processing Multiple Configurations
 
 ```powershell
 # Process Configuration A
@@ -386,7 +443,8 @@ python generate_nvm.py --input-type json --input-file input/config_b.json --prev
 | Issue | Solution |
 |-------|----------|
 | **Excel file not recognized** | Ensure `openpyxl` is installed: `pip install -r requirements.txt` |
-| **Duplicate block ID error** | Check that all `block_id` values are unique within input and previous ARXML |
+| **Duplicate block ID error** | Either use `--allow-update` to modify the block, or remove duplicate from input |
+| **Duplicate block name error** | Either use `--allow-update` to modify the block, or use different name in input |
 | **Invalid C identifier error** | `ram_block_name` must start with letter/underscore and contain only alphanumeric/underscore |
 | **Reserved block ID warning** | Block IDs 0 and 1 are reserved by AUTOSAR; use IDs ≥ 2 |
 | **File not found** | Verify file paths are correct and files exist |

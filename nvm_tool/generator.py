@@ -23,10 +23,12 @@ class NvMGenerator:
         self,
         blocks: Iterable[NvMBlock],
         previous_document: Optional[ParsedArxmlDocument] = None,
+        allow_update: bool = False,
         logger: Optional[logging.Logger] = None,
     ) -> None:
         self.blocks = sorted(list(blocks), key=lambda block: block.block_id)
         self.previous_document = previous_document
+        self.allow_update = allow_update
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
     def generate(self, output_dir: Union[str, Path]) -> None:
@@ -245,26 +247,42 @@ class NvMGenerator:
 
         for block in self.blocks:
             existing_id_location = self.previous_document.block_id_locations.get(block.block_id)
-            if existing_id_location is not None:
-                raise ValueError(
-                    f"Duplicate block ID {block.block_id} found at {existing_id_location}. "
-                    f"New input block '{block.block_name}' uses the same ID. "
-                    "Automatic modification of an existing ARXML block ID is disabled."
-                )
-
             existing_name_location = self.previous_document.short_name_locations.get(block.short_name)
-            if existing_name_location is not None:
-                raise ValueError(
-                    f"Duplicate block name '{block.short_name}' found at {existing_name_location}. "
-                    f"New input block '{block.block_name}' uses the same name. "
-                    "Automatic modification of an existing ARXML block name is disabled."
+            
+            if existing_id_location is not None or existing_name_location is not None:
+                if not self.allow_update:
+                    raise ValueError(
+                        f"Duplicate block ID {block.block_id} or name '{block.short_name}' found. "
+                        f"Use --allow-update flag to modify existing blocks."
+                    )
+                
+                # Update mode: find and replace the existing container
+                self.logger.info("Updating existing NvM block ID %s in ARXML.", block.block_id)
+                
+                # Find the container element to replace
+                container_to_replace = None
+                for container in containers_element:
+                    if self._local_name(container.tag) != "ECUC-CONTAINER-VALUE":
+                        continue
+                    extracted_id = self._extract_block_id(container)
+                    if extracted_id == block.block_id:
+                        container_to_replace = container
+                        break
+                
+                if container_to_replace is not None:
+                    # Replace the old container with the new one
+                    container_index = list(containers_element).index(container_to_replace)
+                    containers_element.remove(container_to_replace)
+                    containers_element.insert(container_index, self._build_block_container(block, self.previous_document.namespace))
+                    merged_blocks_by_id[block.block_id] = block
+                else:
+                    raise ValueError(f"Could not find existing block container for ID {block.block_id} to update.")
+            else:
+                self.logger.info("Appending new NvM block ID %s to previous ARXML.", block.block_id)
+                containers_element.append(
+                    self._build_block_container(block, self.previous_document.namespace)
                 )
-
-            self.logger.info("Appending new NvM block ID %s to previous ARXML.", block.block_id)
-            containers_element.append(
-                self._build_block_container(block, self.previous_document.namespace)
-            )
-            merged_blocks_by_id[block.block_id] = block
+                merged_blocks_by_id[block.block_id] = block
 
         merged_blocks = sorted(merged_blocks_by_id.values(), key=lambda item: item.block_id)
         self._validate_merged_short_names(merged_blocks)
