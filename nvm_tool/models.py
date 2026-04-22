@@ -3,7 +3,40 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 from typing import Any, Mapping, Optional, Tuple
+from xml.etree import ElementTree as ET
 
+
+AUTOSAR_NAMESPACE = "http://autosar.org/schema/r4.0"
+AUTOSAR_XSI_NAMESPACE = "http://www.w3.org/2001/XMLSchema-instance"
+
+NVM_MODULE_DEFINITION_REF = "/AUTOSAR/EcucDefs/NvM"
+NVM_BLOCK_CONTAINER_DEFINITION_REF = "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor"
+NVM_BLOCK_ID_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMNvramBlockIdentifier"
+)
+NVM_BLOCK_LENGTH_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMNvBlockLength"
+)
+NVM_BLOCK_MANAGEMENT_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMBlockManagementType"
+)
+NVM_BLOCK_USE_CRC_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMBlockUseCrc"
+)
+NVM_BLOCK_WRITE_PROT_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMBlockWriteProt"
+)
+NVM_BLOCK_DEVICE_ID_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMNvramDeviceId"
+)
+NVM_BLOCK_BASE_NUMBER_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMNvBlockBaseNumber"
+)
+NVM_BLOCK_NUM_DEFINITION_REF = "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMNvBlockNum"
+NVM_BLOCK_RAM_ADDRESS_DEFINITION_REF = (
+    "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMRamBlockDataAddress"
+)
+NVM_BLOCK_CRC_TYPE_DEFINITION_REF = "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/NvMBlockCrcType"
 
 _C_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INTEGER_STRING_PATTERN = re.compile(r"^[+-]?\d+$")
@@ -69,6 +102,24 @@ def _as_int(value: Any, field_name: str) -> int:
 
 
 @dataclass(frozen=True)
+class ParameterDefinition:
+    name: str
+    definition_ref: str
+    dest: str
+    value_kind: str
+
+
+@dataclass
+class ParsedArxmlDocument:
+    tree: ET.ElementTree
+    root: ET.Element
+    namespace: str
+    module_configuration: ET.Element
+    containers_element: Optional[ET.Element]
+    blocks: list["NvMBlock"]
+
+
+@dataclass(frozen=True)
 class NvMBlock:
     """Structured representation of a single AUTOSAR NvM block."""
 
@@ -84,12 +135,86 @@ class NvMBlock:
     device_id: Optional[int] = None
     nv_block_base_number: Optional[int] = None
     nv_block_num: Optional[int] = None
+    short_name_override: Optional[str] = None
 
     ALLOWED_DEVICES = {"FEE", "EA"}
     ALLOWED_BLOCK_MANAGEMENT_TYPES = {"NATIVE", "REDUNDANT", "DATASET"}
     ALLOWED_CRC_TYPES = {"CRC8", "CRC16", "CRC32"}
     DEFAULT_DEVICE_IDS = {"FEE": 0, "EA": 1}
     DEFAULT_NV_BLOCK_NUM = {"NATIVE": 1, "REDUNDANT": 2, "DATASET": 2}
+    DEVICE_ID_TO_NAME = {0: "FEE", 1: "EA"}
+    AUTOSAR_MANAGEMENT_TO_INTERNAL = {
+        "NVM_BLOCK_NATIVE": "NATIVE",
+        "NVM_BLOCK_REDUNDANT": "REDUNDANT",
+        "NVM_BLOCK_DATASET": "DATASET",
+    }
+    AUTOSAR_CRC_TO_INTERNAL = {
+        "NVM_CRC8": "CRC8",
+        "NVM_CRC16": "CRC16",
+        "NVM_CRC32": "CRC32",
+    }
+    STANDARD_PARAMETER_DEFINITIONS = (
+        ParameterDefinition(
+            "block_id",
+            NVM_BLOCK_ID_DEFINITION_REF,
+            "ECUC-INTEGER-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "block_size",
+            NVM_BLOCK_LENGTH_DEFINITION_REF,
+            "ECUC-INTEGER-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "block_management_type",
+            NVM_BLOCK_MANAGEMENT_DEFINITION_REF,
+            "ECUC-ENUMERATION-PARAM-DEF",
+            "textual",
+        ),
+        ParameterDefinition(
+            "use_crc",
+            NVM_BLOCK_USE_CRC_DEFINITION_REF,
+            "ECUC-BOOLEAN-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "write_protection",
+            NVM_BLOCK_WRITE_PROT_DEFINITION_REF,
+            "ECUC-BOOLEAN-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "device_id",
+            NVM_BLOCK_DEVICE_ID_DEFINITION_REF,
+            "ECUC-INTEGER-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "nv_block_base_number",
+            NVM_BLOCK_BASE_NUMBER_DEFINITION_REF,
+            "ECUC-INTEGER-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "nv_block_num",
+            NVM_BLOCK_NUM_DEFINITION_REF,
+            "ECUC-INTEGER-PARAM-DEF",
+            "numerical",
+        ),
+        ParameterDefinition(
+            "ram_block_name",
+            NVM_BLOCK_RAM_ADDRESS_DEFINITION_REF,
+            "ECUC-STRING-PARAM-DEF",
+            "textual",
+        ),
+        ParameterDefinition(
+            "crc_type",
+            NVM_BLOCK_CRC_TYPE_DEFINITION_REF,
+            "ECUC-ENUMERATION-PARAM-DEF",
+            "textual",
+        ),
+    )
 
     def __post_init__(self) -> None:
         normalized_device = self.device.strip().upper()
@@ -97,11 +222,15 @@ class NvMBlock:
         normalized_crc = self.crc_type.strip().upper()
         normalized_block_name = self.block_name.strip()
         normalized_ram_name = self.ram_block_name.strip()
+        normalized_short_name_override = (
+            self.short_name_override.strip() if self.short_name_override is not None else None
+        )
 
         object.__setattr__(self, "block_name", normalized_block_name)
         object.__setattr__(self, "ram_block_name", normalized_ram_name)
         object.__setattr__(self, "device", normalized_device)
         object.__setattr__(self, "block_management_type", normalized_management)
+        object.__setattr__(self, "short_name_override", normalized_short_name_override)
 
         if normalized_device not in self.ALLOWED_DEVICES:
             raise ValueError(
@@ -150,9 +279,12 @@ class NvMBlock:
         if self.nv_block_num is not None and self.nv_block_num <= 0:
             raise ValueError(f"{self.block_name}: nv_block_num must be > 0.")
 
+        if normalized_short_name_override is not None and not normalized_short_name_override:
+            raise ValueError(f"{self.block_name}: short_name_override must not be empty.")
+
     @classmethod
     def from_mapping(cls, record: Mapping[str, Any]) -> "NvMBlock":
-        """Build an NvMBlock from a parser record."""
+        """Build an NvMBlock from parsed JSON or Excel input."""
 
         return cls(
             block_name=str(record["block_name"]),
@@ -181,8 +313,84 @@ class NvMBlock:
             ),
         )
 
+    @classmethod
+    def from_arxml_values(
+        cls,
+        short_name: str,
+        parameter_values: Mapping[str, str],
+    ) -> "NvMBlock":
+        """Build an NvMBlock from a previous ARXML container."""
+
+        block_id = _as_int(
+            parameter_values[NVM_BLOCK_ID_DEFINITION_REF],
+            "NvMNvramBlockIdentifier",
+        )
+        block_size = _as_int(
+            parameter_values[NVM_BLOCK_LENGTH_DEFINITION_REF],
+            "NvMNvBlockLength",
+        )
+        device_id = _as_int(
+            parameter_values[NVM_BLOCK_DEVICE_ID_DEFINITION_REF],
+            "NvMNvramDeviceId",
+        )
+        device = cls.DEVICE_ID_TO_NAME.get(device_id)
+        if device is None:
+            raise ValueError(
+                f"{short_name}: NvMNvramDeviceId={device_id} is unsupported. "
+                "Only device IDs 0 (FEE) and 1 (EA) are supported."
+            )
+
+        management_value = parameter_values[NVM_BLOCK_MANAGEMENT_DEFINITION_REF].strip().upper()
+        management_type = cls.AUTOSAR_MANAGEMENT_TO_INTERNAL.get(management_value)
+        if management_type is None:
+            raise ValueError(
+                f"{short_name}: unsupported NvMBlockManagementType '{management_value}'."
+            )
+
+        use_crc = _as_bool(
+            parameter_values[NVM_BLOCK_USE_CRC_DEFINITION_REF],
+            "NvMBlockUseCrc",
+        )
+        write_protection = _as_bool(
+            parameter_values[NVM_BLOCK_WRITE_PROT_DEFINITION_REF],
+            "NvMBlockWriteProt",
+        )
+        crc_type = "CRC16"
+        if use_crc:
+            raw_crc_type = parameter_values.get(NVM_BLOCK_CRC_TYPE_DEFINITION_REF)
+            if raw_crc_type is None:
+                raise ValueError(f"{short_name}: missing NvMBlockCrcType while NvMBlockUseCrc=1.")
+            normalized_crc_type = raw_crc_type.strip().upper()
+            crc_type = cls.AUTOSAR_CRC_TO_INTERNAL.get(normalized_crc_type, "")
+            if not crc_type:
+                raise ValueError(f"{short_name}: unsupported NvMBlockCrcType '{raw_crc_type}'.")
+
+        return cls(
+            block_name=short_name,
+            short_name_override=short_name,
+            block_id=block_id,
+            block_size=block_size,
+            ram_block_name=parameter_values[NVM_BLOCK_RAM_ADDRESS_DEFINITION_REF],
+            device=device,
+            block_management_type=management_type,
+            use_crc=use_crc,
+            crc_type=crc_type,
+            write_protection=write_protection,
+            device_id=device_id,
+            nv_block_base_number=_as_int(
+                parameter_values[NVM_BLOCK_BASE_NUMBER_DEFINITION_REF],
+                "NvMNvBlockBaseNumber",
+            ),
+            nv_block_num=_as_int(
+                parameter_values[NVM_BLOCK_NUM_DEFINITION_REF],
+                "NvMNvBlockNum",
+            ),
+        )
+
     @property
     def short_name(self) -> str:
+        if self.short_name_override:
+            return self.short_name_override
         return _normalize_short_name(self.block_name)
 
     @property
@@ -244,3 +452,19 @@ class NvMBlock:
         if self.nv_block_num is not None:
             return self.nv_block_num
         return self.DEFAULT_NV_BLOCK_NUM[self.block_management_type]
+
+    def autosar_parameter_values(self) -> dict[str, str]:
+        values = {
+            NVM_BLOCK_ID_DEFINITION_REF: str(self.block_id),
+            NVM_BLOCK_LENGTH_DEFINITION_REF: str(self.block_size),
+            NVM_BLOCK_MANAGEMENT_DEFINITION_REF: self.autosar_management_enum,
+            NVM_BLOCK_USE_CRC_DEFINITION_REF: self.autosar_use_crc_value,
+            NVM_BLOCK_WRITE_PROT_DEFINITION_REF: self.autosar_write_protection_value,
+            NVM_BLOCK_DEVICE_ID_DEFINITION_REF: str(self.effective_device_id),
+            NVM_BLOCK_BASE_NUMBER_DEFINITION_REF: str(self.effective_nv_block_base_number),
+            NVM_BLOCK_NUM_DEFINITION_REF: str(self.effective_nv_block_num),
+            NVM_BLOCK_RAM_ADDRESS_DEFINITION_REF: self.ram_block_name,
+        }
+        if self.use_crc:
+            values[NVM_BLOCK_CRC_TYPE_DEFINITION_REF] = self.autosar_crc_enum
+        return values

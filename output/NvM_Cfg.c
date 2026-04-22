@@ -9,10 +9,11 @@
 extern uint8 Ram_EngineSettings[64u];
 extern uint8 Ram_OdometerMirror[16u];
 extern uint8 Ram_DiagnosticSnapshot[128u];
+extern uint8 Ram_LegacyBlock[8u];
 
 /*
- * NvM block descriptor table.
- * Each entry maps one logical NvM block to its RAM block and storage attributes.
+ * Merged NvM block descriptor table.
+ * Existing blocks from the previous ARXML are preserved unless updated by the new input.
  */
 const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
 {
@@ -47,6 +48,17 @@ const NvM_BlockDescriptorType NvM_BlockDescriptorTable[NVM_NUMBER_OF_BLOCKS] =
         .BlockManagementType = NVM_BLOCK_DATASET,
         .BlockUseCrc = FALSE,
         .BlockCrcType = NVM_CRC_NONE,
+        .WriteProtection = FALSE
+    },
+    /* LegacyBlock: block ID 10, FEE, NATIVE, CRC16 */
+    {
+        .BlockId = NVM_BLOCK_ID_LEGACY_BLOCK,
+        .BlockLength = 8u,
+        .RamBlockDataAddress = Ram_LegacyBlock,
+        .DeviceId = NVM_DEVICE_FEE,
+        .BlockManagementType = NVM_BLOCK_NATIVE,
+        .BlockUseCrc = TRUE,
+        .BlockCrcType = NVM_CRC16,
         .WriteProtection = FALSE
     }
 };

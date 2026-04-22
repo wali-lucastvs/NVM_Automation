@@ -17,6 +17,12 @@ Run the generator with:
 python generate_nvm.py samples/nvm_blocks.json --output output --verbose
 ```
 
+To append blocks from an already generated NvM ARXML into the new `NvM.arxml`:
+
+```powershell
+python generate_nvm.py samples/nvm_blocks.json --output output --previous-arxml path\to\previous\NvM.arxml
+```
+
 Excel input is also supported:
 python generate_nvm.py samples/<NAME_OF_EXCEL_FILE>.xlsx --output output
 ```powershell
@@ -71,5 +77,11 @@ The parser also warns if `block_id` is below `2`, because AUTOSAR typically rese
 ## Notes
 
 - The generated ARXML follows AUTOSAR ECUC-style `ECUC-MODULE-CONFIGURATION-VALUES` and `ECUC-CONTAINER-VALUE` layout for `NvMBlockDescriptor`.
+- When `--previous-arxml` is supplied, existing `NvMBlockDescriptor` containers are copied first and the newly generated blocks are appended after them in the new `NvM.arxml`.
+- Merge validation rejects duplicate ARXML `SHORT-NAME` values or duplicate `NvMNvramBlockIdentifier` values across the previous and current block sets.
 - The input field `block_size` is mapped to the official AUTOSAR parameter `NvMNvBlockLength`.
 - `NvMNvramDeviceId` is emitted as an integer parameter. When only `FEE` or `EA` is supplied, the generator uses default device IDs unless you override them in the input.
+
+
+
+python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output --verbose
