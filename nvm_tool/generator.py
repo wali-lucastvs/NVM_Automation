@@ -251,9 +251,14 @@ class NvMGenerator:
             
             if existing_id_location is not None or existing_name_location is not None:
                 if not self.allow_update:
+                    if existing_id_location is not None:
+                        raise ValueError(
+                            f"Duplicate block ID {block.block_id} found in previous ARXML at "
+                            f"{existing_id_location}. Use --allow-update flag to modify the block."
+                        )
                     raise ValueError(
-                        f"Duplicate block ID {block.block_id} or name '{block.short_name}' found. "
-                        f"Use --allow-update flag to modify existing blocks."
+                        f"Duplicate block name '{block.short_name}' found in previous ARXML at "
+                        f"{existing_name_location}. Use --allow-update flag to modify the block."
                     )
                 
                 # Update mode: find and replace the existing container

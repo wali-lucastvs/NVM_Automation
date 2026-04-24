@@ -10,6 +10,8 @@ This Python-based automation tool generates AUTOSAR NvM (Non-Volatile Memory) co
 - `NvM_Cfg.h` - C header file
 - `NvM.arxml` - AUTOSAR ECUC-style XML configuration
 
+The project now also includes a desktop GUI (`nvm_gui.py`) that lets users upload JSON or Excel files, select any documented workflow through buttons, and run generation without typing CLI commands.
+
 The tool supports merging new blocks with previously generated ARXML files, input validation, CRC configuration, and comprehensive error checking.
 
 ---
@@ -27,6 +29,41 @@ The tool supports merging new blocks with previously generated ARXML files, inpu
 # Install dependencies (required for Excel input)
 pip install -r requirements.txt
 ```
+
+### Run the Desktop GUI
+
+```powershell
+python nvm_gui.py
+```
+
+The GUI provides:
+
+- File pickers for JSON, Excel, previous `NvM.arxml`, and output folder
+- Buttons for all README workflows:
+  - Generate from JSON
+  - Generate from Excel
+  - Merge JSON with previous ARXML
+  - Merge Excel with previous ARXML
+  - Update JSON with previous ARXML
+  - Update Excel with previous ARXML
+- Verbose logging toggle
+- CLI help preview and live execution log
+- One-click output folder opening
+
+### Build a Windows `.exe`
+
+```powershell
+pip install -r requirements-dev.txt
+powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
+```
+
+After the build finishes, the executable is created at:
+
+```text
+dist\NvMAutomationTool.exe
+```
+
+This `.exe` can be shared with users who do not want to run Python manually.
 
 ---
 
