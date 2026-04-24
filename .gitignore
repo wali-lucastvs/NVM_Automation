@@ -5,3 +5,4 @@ build/
 dist/
 release/
 tests/_tmp/
+workspace/output/

@@ -12,6 +12,7 @@ from nvm_tool import (
     GenerationRequest,
     build_argument_parser,
     detect_input_type,
+    ensure_workspace,
     format_cli_command,
     generate_artifacts,
 )
@@ -79,6 +80,7 @@ class NvMDesktopApp:
     }
 
     def __init__(self, root: tk.Tk) -> None:
+        self.workspace = ensure_workspace()
         self.root = root
         self.root.title(APP_NAME)
         self.root.geometry("980x760")
@@ -86,7 +88,7 @@ class NvMDesktopApp:
 
         self.input_file_var = tk.StringVar()
         self.previous_arxml_var = tk.StringVar()
-        self.output_dir_var = tk.StringVar(value=str(Path("output").resolve()))
+        self.output_dir_var = tk.StringVar(value=str(self.workspace.output_dir))
         self.verbose_var = tk.BooleanVar(value=False)
         self.command_preview_var = tk.StringVar(value="Select a command button to preview the equivalent CLI command.")
         self.detected_type_var = tk.StringVar(value="No input file selected")
@@ -254,6 +256,7 @@ class NvMDesktopApp:
     def _browse_input(self) -> None:
         path = filedialog.askopenfilename(
             title="Select JSON or Excel input",
+            initialdir=self._resolve_dialog_directory(self.input_file_var.get(), self.workspace.input_dir),
             filetypes=[
                 ("Supported files", "*.json *.xlsx *.xlsm"),
                 ("JSON files", "*.json"),
@@ -268,6 +271,10 @@ class NvMDesktopApp:
     def _browse_previous_arxml(self) -> None:
         path = filedialog.askopenfilename(
             title="Select previous NvM.arxml",
+            initialdir=self._resolve_dialog_directory(
+                self.previous_arxml_var.get(),
+                self._default_previous_arxml_dir(),
+            ),
             filetypes=[("ARXML files", "*.arxml *.xml"), ("All files", "*.*")],
         )
         if not path:
@@ -276,7 +283,10 @@ class NvMDesktopApp:
         self._refresh_command_preview()
 
     def _browse_output_dir(self) -> None:
-        path = filedialog.askdirectory(title="Select output folder")
+        path = filedialog.askdirectory(
+            title="Select output folder",
+            initialdir=self._resolve_dialog_directory(self.output_dir_var.get(), self.workspace.output_dir),
+        )
         if not path:
             return
         self.output_dir_var.set(path)
@@ -381,6 +391,22 @@ class NvMDesktopApp:
         output_dir.mkdir(parents=True, exist_ok=True)
         os.startfile(output_dir)
 
+    def _default_previous_arxml_dir(self) -> Path:
+        generated_arxml = self.workspace.output_dir / "NvM.arxml"
+        if generated_arxml.exists():
+            return self.workspace.output_dir
+        return self.workspace.input_dir
+
+    @staticmethod
+    def _resolve_dialog_directory(current_value: str, fallback: Path) -> str:
+        if current_value:
+            current_path = Path(current_value).expanduser()
+            if current_path.is_dir():
+                return str(current_path)
+            if current_path.parent.exists():
+                return str(current_path.parent)
+        return str(fallback)
+
     def _run_operation(self, operation_key: str) -> None:
         if self.worker_thread is not None and self.worker_thread.is_alive():
             messagebox.showinfo("NvM Automation Tool", "A generation job is already running.")
@@ -439,7 +465,7 @@ class NvMDesktopApp:
         if operation["needs_previous"] and previous_arxml is None:
             raise ValueError("This command requires a previous NvM.arxml file.")
 
-        output_dir = self.output_dir_var.get().strip() or "output"
+        output_dir = self.output_dir_var.get().strip() or str(self.workspace.output_dir)
         return GenerationRequest(
             input_type=operation["input_type"],
             input_file=Path(input_file),
@@ -468,7 +494,7 @@ class NvMDesktopApp:
                 "--input-file",
                 "<select file>",
                 "--output",
-                self.output_dir_var.get().strip() or "output",
+                self.output_dir_var.get().strip() or str(self.workspace.output_dir),
             ]
             if operation["needs_previous"]:
                 preview.extend(["--previous-arxml", "<select NvM.arxml>"])
