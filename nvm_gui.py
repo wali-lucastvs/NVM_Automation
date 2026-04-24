@@ -19,7 +19,7 @@ from nvm_tool import (
 APP_NAME = "AUTOSAR NvM Automation Tool"
 APP_DESCRIPTION = "A tool for automating AUTOSAR NvM workflows."
 APP_VERSION = "1.0.0"
-APP_AUTHOR = "S M Wali Haider Zaidi"
+APP_AUTHOR = "S M Wali Haider"
 APP_CONTACT_EMAIL = "smwalihaiderzaidi@gmail.com"
 APP_CONTACT_PHONE = "+91 6394862429"
 APP_COPYRIGHT = "\N{COPYRIGHT SIGN} 2026"
