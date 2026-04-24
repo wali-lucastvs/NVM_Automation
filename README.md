@@ -81,6 +81,18 @@ This `.exe` can be shared with users who do not want to run Python manually.
 
 ---
 
+### Clean directory command
+
+```powershell
+Remove-Item -LiteralPath release -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath dist -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+This will remove all the builded files from the folder and subfolders.
+
+
+---
+
+
 ## Quick Start
 
 ### Basic JSON Input (Generate NvM Configuration)
