@@ -16,6 +16,20 @@ The tool supports merging new blocks with previously generated ARXML files, inpu
 
 ---
 
+## Workspace Layout
+
+Both the GUI and CLI now use the same runtime folders:
+
+```text
+workspace/
+  input/    <- sample JSON, Excel, and baseline ARXML files
+  output/   <- generated NvM_Cfg.c, NvM_Cfg.h, and NvM.arxml
+```
+
+The application creates `workspace/output` automatically when needed. The old top-level `input/` and `output/` folders are no longer part of the project layout.
+
+---
+
 ## Installation & Requirements
 
 ### Prerequisites
@@ -67,18 +81,30 @@ This `.exe` can be shared with users who do not want to run Python manually.
 
 ---
 
+### Clean directory command
+
+```powershell
+Remove-Item -LiteralPath release -Recurse -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath dist -Recurse -Force -ErrorAction SilentlyContinue
+```
+
+This will remove all the builded files from the folder and subfolders.
+
+
+---
+
+
 ## Quick Start
 
 ### Basic JSON Input (Generate NvM Configuration)
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --output output
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output
 ```
 
 ### Basic Excel Input
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --output output
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --output workspace/output
 ```
 
 ---
@@ -90,11 +116,11 @@ python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --out
 Generate NvM configuration files from a JSON input file:
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --output output
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output
 ```
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --output output --verbose
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output --verbose
 ```
 
 **Output:** Generates `NvM_Cfg.c`, `NvM_Cfg.h`, and `NvM.arxml` in the output directory.
@@ -105,11 +131,11 @@ python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --ou
 ### 2. Generate from Excel (XLSX/XLSM)
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --output output
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --output workspace/output
 ```
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --output output --verbose
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --output workspace/output --verbose
 ```
 
 
@@ -122,11 +148,11 @@ python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --out
 Append new blocks to an existing `NvM.arxml` file while preserving previous block configurations:
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output
 ```
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output --verbose
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output --verbose
 ```
 
 **Purpose:** Merges new block definitions with an already-generated ARXML, keeping all existing blocks intact and appending new ones.
@@ -136,11 +162,11 @@ python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --pr
 ### 4. Merge New Blocks with Previous ARXML (Excel Input)
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --previous-arxml input/NvM.arxml --output output
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --previous-arxml workspace/input/NvM.arxml --output workspace/output
 ```
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --previous-arxml input/NvM.arxml --output output --verbose
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --previous-arxml workspace/input/NvM.arxml --output workspace/output --verbose
 ```
 
 
@@ -151,11 +177,11 @@ python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --pre
 Modify existing blocks in a previous ARXML by providing new block data with the same block ID:
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output --allow-update
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update
 ```
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --previous-arxml input/NvM.arxml --output output --allow-update --verbose
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update --verbose
 ```
 
 **Purpose:** Replaces existing blocks (matching by ID) with updated configurations instead of rejecting them.
@@ -165,11 +191,11 @@ python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --pr
 ### 6. Update Existing Blocks (Excel Input with --allow-update)
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --previous-arxml input/NvM.arxml --output output --allow-update
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update
 ```
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --previous-arxml input/NvM.arxml --output output --allow-update --verbose
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update --verbose
 ```
 
 ---
@@ -178,10 +204,10 @@ python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --pre
 
 ### 7. Specify Custom Output Directory
 
-All commands accept `--output` to customize where files are written (default: `output` folder):
+All commands accept `--output` to customize where files are written (default: `workspace/output`):
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --output C:\CustomPath\nvm_output
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --output C:\CustomPath\nvm_output
 ```
 
 ---
@@ -361,7 +387,7 @@ When using `--allow-update` with `--previous-arxml`:
 **Example:**
 ```powershell
 # Update existing block with ID 10, append new block with ID 20
-python generate_nvm.py --input-type excel --input-file input/updates.xlsx --previous-arxml output/NvM.arxml --output output --allow-update
+python generate_nvm.py --input-type excel --input-file workspace/input/updates.xlsx --previous-arxml workspace/output/NvM.arxml --output workspace/output --allow-update
 ```
 
 ---
@@ -432,22 +458,22 @@ All errors are logged with context to help identify and fix issues in the input.
 ### Workflow 1: Initial Configuration from JSON
 
 ```powershell
-python generate_nvm.py --input-type json --input-file input/nvm_blocks.json --output output --verbose
+python generate_nvm.py --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output --verbose
 ```
 
 ### Workflow 2: Add New Blocks to Existing Configuration
 
 ```powershell
-# Previous run generated: output/NvM.arxml
-# New blocks in: input/new_blocks.json
+# Previous run generated: workspace/output/NvM.arxml
+# New blocks in: workspace/input/new_blocks.json
 
-python generate_nvm.py --input-type json --input-file input/new_blocks.json --previous-arxml output/NvM.arxml --output output --verbose
+python generate_nvm.py --input-type json --input-file workspace/input/new_blocks.json --previous-arxml workspace/output/NvM.arxml --output workspace/output --verbose
 ```
 
 ### Workflow 3: Generate from Excel with Custom Output Path
 
 ```powershell
-python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --output "C:\Projects\NvM_Config" --verbose
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.xlsx --output "C:\Projects\NvM_Config" --verbose
 ```
 
 ### Workflow 4: Update Existing Blocks in Previous Configuration
@@ -456,7 +482,7 @@ python generate_nvm.py --input-type excel --input-file input/NVM_Data.xlsx --out
 # Modify block properties in input file (same block ID)
 # Run with --allow-update to replace the old block
 
-python generate_nvm.py --input-type excel --input-file input/NVM_Data_Updated.xlsx --previous-arxml output/NvM.arxml --output output --allow-update --verbose
+python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data_Updated.xlsx --previous-arxml workspace/output/NvM.arxml --output workspace/output --allow-update --verbose
 ```
 
 This will replace blocks with matching IDs while keeping other blocks intact.
@@ -467,10 +493,10 @@ This will replace blocks with matching IDs while keeping other blocks intact.
 
 ```powershell
 # Process Configuration A
-python generate_nvm.py --input-type json --input-file input/config_a.json --output output\config_a
+python generate_nvm.py --input-type json --input-file workspace/input/config_a.json --output workspace\output\config_a
 
 # Process Configuration B (merging with existing)
-python generate_nvm.py --input-type json --input-file input/config_b.json --previous-arxml output\config_a\NvM.arxml --output output\config_ab
+python generate_nvm.py --input-type json --input-file workspace/input/config_b.json --previous-arxml workspace\output\config_a\NvM.arxml --output workspace\output\config_ab
 ```
 
 ---

@@ -5,7 +5,15 @@ from pathlib import Path
 import uuid
 import unittest
 
-from nvm_tool import GenerationRequest, detect_input_type, format_cli_command, generate_artifacts
+from nvm_tool import (
+    GenerationRequest,
+    build_argument_parser,
+    default_output_dir,
+    detect_input_type,
+    ensure_workspace,
+    format_cli_command,
+    generate_artifacts,
+)
 
 
 def sample_block_payload() -> list[dict[str, object]]:
@@ -87,6 +95,20 @@ class ApplicationTests(unittest.TestCase):
         self.assertIn("--previous-arxml", command)
         self.assertIn("--allow-update", command)
         self.assertIn("--verbose", command)
+
+    def test_cli_defaults_to_shared_workspace_output_directory(self) -> None:
+        layout = ensure_workspace()
+        parsed_args = build_argument_parser().parse_args(
+            [
+                "--input-type",
+                "json",
+                "--input-file",
+                str(layout.input_dir / "nvm_blocks.json"),
+            ]
+        )
+
+        self.assertEqual(parsed_args.output, default_output_dir())
+        self.assertEqual(parsed_args.output, layout.output_dir)
 
     @staticmethod
     def _make_temp_dir() -> Path:

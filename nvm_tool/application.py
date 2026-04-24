@@ -2,19 +2,20 @@ from __future__ import annotations
 
 import argparse
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Sequence
 
 from .generator import NvMGenerator
 from .parser import NvMConfigParser
+from .workspace import default_output_dir
 
 
 @dataclass(frozen=True)
 class GenerationRequest:
     input_type: str
     input_file: Path
-    output_dir: Path = Path("output")
+    output_dir: Path = field(default_factory=default_output_dir)
     previous_arxml: Optional[Path] = None
     verbose: bool = False
     allow_update: bool = False
@@ -80,8 +81,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("output"),
-        help="Directory where NvM_Cfg.c, NvM_Cfg.h, and the merged NvM.arxml are written.",
+        default=default_output_dir(),
+        help="Directory where NvM_Cfg.c, NvM_Cfg.h, and NvM.arxml are written.",
     )
     parser.add_argument(
         "--verbose",
