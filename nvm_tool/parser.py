@@ -52,8 +52,10 @@ class NvMConfigParser:
 
         if normalized_input_type == "json":
             records = self._read_json(path)
+            self.logger.debug("Read %d records from JSON file %s", len(records), path)
         else:
             records = self._read_excel(path)
+            self.logger.debug("Read %d records from Excel file %s", len(records), path)
 
         blocks = [self._record_to_block(record, index) for index, record in enumerate(records, start=1)]
         self._validate_unique_ids(blocks, "input")
@@ -191,6 +193,7 @@ class NvMConfigParser:
         return matches
 
     def _record_to_block(self, record: Dict[str, Any], index: int) -> NvMBlock:
+        self.logger.debug("Converting record %d to NvMBlock: %s", index, record)
         missing = sorted(self.REQUIRED_FIELDS - set(record))
         if missing:
             raise ValueError(f"Record {index} is missing required fields: {', '.join(missing)}")

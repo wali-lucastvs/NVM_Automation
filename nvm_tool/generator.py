@@ -36,10 +36,13 @@ class NvMGenerator:
         if destination.exists() and not destination.is_dir():
             raise ValueError(f"Output path must be a directory: {destination}")
         destination.mkdir(parents=True, exist_ok=True)
+        self.logger.debug("Starting generation to output directory: %s", destination)
 
         if self.previous_document is not None:
+            self.logger.debug("Merging %d new blocks into previous ARXML", len(self.blocks))
             merged_blocks, merged_arxml = self._merge_blocks_into_previous_arxml()
         else:
+            self.logger.debug("Generating fresh ARXML with %d blocks", len(self.blocks))
             merged_blocks, merged_arxml = self._generate_fresh_arxml()
         
         files = {
@@ -189,6 +192,7 @@ class NvMGenerator:
 
     def _generate_fresh_arxml(self) -> Tuple[List[NvMBlock], str]:
         """Generate a fresh ARXML from input blocks without merging."""
+        self.logger.debug("Generating fresh ARXML from %d blocks", len(self.blocks))
         namespace = "http://autosar.org/schema/r4.0"
         
         # Create root element
@@ -232,6 +236,7 @@ class NvMGenerator:
         return merged_blocks, ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8") + "\n"
 
     def _merge_blocks_into_previous_arxml(self) -> Tuple[List[NvMBlock], str]:
+        self.logger.debug("Merging blocks into previous ARXML document")
         root = deepcopy(self.previous_document.root)
         module_configuration = self._find_nvm_module_configuration(root)
         containers_element = self._ensure_direct_child(
@@ -246,6 +251,7 @@ class NvMGenerator:
         }
 
         for block in self.blocks:
+            self.logger.debug("Processing block ID %s for merge", block.block_id)
             existing_id_location = self.previous_document.block_id_locations.get(block.block_id)
             existing_name_location = self.previous_document.short_name_locations.get(block.short_name)
             

@@ -56,10 +56,10 @@ The GUI provides:
 - Buttons for all README workflows:
   - Generate from JSON
   - Generate from Excel
-  - Merge JSON with previous ARXML
-  - Merge Excel with previous ARXML
-  - Update JSON with previous ARXML
-  - Update Excel with previous ARXML
+  - Merge ( ARXML + JSON )
+  - Merge ( ARXML + EXCEL )
+  - Update ARXML with JSON 
+  - Update ARXML with Excel
 - Verbose logging toggle
 - CLI help preview and live execution log
 - One-click output folder opening
