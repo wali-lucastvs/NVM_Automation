@@ -38,12 +38,7 @@ class NvMGenerator:
         destination.mkdir(parents=True, exist_ok=True)
         self.logger.debug("Starting generation to output directory: %s", destination)
 
-        if self.previous_document is not None:
-            self.logger.debug("Merging %d new blocks into previous ARXML", len(self.blocks))
-            merged_blocks, merged_arxml = self._merge_blocks_into_previous_arxml()
-        else:
-            self.logger.debug("Generating fresh ARXML with %d blocks", len(self.blocks))
-            merged_blocks, merged_arxml = self._generate_fresh_arxml()
+        merged_blocks, merged_arxml = self._resolve_generation_outputs()
         
         files = {
             "NvM_Cfg.h": self.render_header(merged_blocks),
@@ -64,6 +59,10 @@ class NvMGenerator:
                 block.device,
                 block.block_management_type,
             )
+
+    def resolve_blocks(self) -> List[NvMBlock]:
+        merged_blocks, _ = self._resolve_generation_outputs()
+        return merged_blocks
 
     def render_header(self, blocks: List[NvMBlock]) -> str:
         lines = [
@@ -234,6 +233,14 @@ class NvMGenerator:
         tree = ET.ElementTree(root)
         ET.indent(tree, space="  ")
         return merged_blocks, ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8") + "\n"
+
+    def _resolve_generation_outputs(self) -> Tuple[List[NvMBlock], str]:
+        if self.previous_document is not None:
+            self.logger.debug("Merging %d new blocks into previous ARXML", len(self.blocks))
+            return self._merge_blocks_into_previous_arxml()
+
+        self.logger.debug("Generating fresh ARXML with %d blocks", len(self.blocks))
+        return self._generate_fresh_arxml()
 
     def _merge_blocks_into_previous_arxml(self) -> Tuple[List[NvMBlock], str]:
         self.logger.debug("Merging blocks into previous ARXML document")

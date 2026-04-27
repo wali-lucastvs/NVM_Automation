@@ -2,11 +2,13 @@
 
 from .application import (
     GenerationRequest,
+    NvMMemoryUsageSummary,
     build_argument_parser,
     detect_input_type,
     format_cli_command,
     generate_artifacts,
     run_cli,
+    summarize_memory_usage,
 )
 from .generator import NvMGenerator
 from .models import NvMBlock, ParsedArxmlDocument
@@ -15,6 +17,7 @@ from .workspace import default_input_dir, default_output_dir, ensure_workspace, 
 
 __all__ = [
     "GenerationRequest",
+    "NvMMemoryUsageSummary",
     "NvMBlock",
     "NvMConfigParser",
     "NvMGenerator",
@@ -28,4 +31,5 @@ __all__ = [
     "generate_artifacts",
     "get_workspace_layout",
     "run_cli",
+    "summarize_memory_usage",
 ]

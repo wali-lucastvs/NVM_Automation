@@ -37,6 +37,16 @@ class GenerationRequest:
         )
 
 
+@dataclass(frozen=True)
+class NvMMemoryUsageSummary:
+    block_count: int
+    total_payload_bytes: int
+    total_estimated_storage_bytes: int
+    total_crc_bytes: int
+    fee_estimated_storage_bytes: int
+    ea_estimated_storage_bytes: int
+
+
 def configure_logger(
     verbose: bool,
     handler: Optional[logging.Handler] = None,
@@ -128,6 +138,58 @@ def generate_artifacts(
     ]
 
 
+def summarize_memory_usage(request: GenerationRequest) -> NvMMemoryUsageSummary:
+    normalized_request = request.normalized()
+    logger = logging.getLogger("nvm_generator.summary")
+    parser = NvMConfigParser(logger=logger)
+    input_blocks = parser.parse_input_file(
+        normalized_request.input_type,
+        normalized_request.input_file,
+    )
+
+    previous_document = None
+    if normalized_request.previous_arxml:
+        previous_document = parser.parse_previous_arxml(normalized_request.previous_arxml)
+
+    generator = NvMGenerator(
+        blocks=input_blocks,
+        previous_document=previous_document,
+        allow_update=normalized_request.allow_update,
+        logger=logger,
+    )
+    effective_blocks = generator.resolve_blocks()
+
+    total_payload_bytes = 0
+    total_estimated_storage_bytes = 0
+    total_crc_bytes = 0
+    fee_estimated_storage_bytes = 0
+    ea_estimated_storage_bytes = 0
+
+    for block in effective_blocks:
+        block_copies = block.effective_nv_block_num
+        payload_bytes = block.block_size
+        crc_bytes = _crc_bytes_for_block(block)
+        estimated_storage_bytes = (payload_bytes + crc_bytes) * block_copies
+
+        total_payload_bytes += payload_bytes
+        total_crc_bytes += crc_bytes * block_copies
+        total_estimated_storage_bytes += estimated_storage_bytes
+
+        if block.device == "FEE":
+            fee_estimated_storage_bytes += estimated_storage_bytes
+        elif block.device == "EA":
+            ea_estimated_storage_bytes += estimated_storage_bytes
+
+    return NvMMemoryUsageSummary(
+        block_count=len(effective_blocks),
+        total_payload_bytes=total_payload_bytes,
+        total_estimated_storage_bytes=total_estimated_storage_bytes,
+        total_crc_bytes=total_crc_bytes,
+        fee_estimated_storage_bytes=fee_estimated_storage_bytes,
+        ea_estimated_storage_bytes=ea_estimated_storage_bytes,
+    )
+
+
 def run_cli(argv: Optional[Sequence[str]] = None) -> int:
     argument_parser = build_argument_parser()
     if argv is not None and len(argv) == 0:
@@ -195,3 +257,13 @@ def _quote_for_powershell(value: str) -> str:
     if any(character.isspace() for character in value):
         return '"' + value.replace('"', '`"') + '"'
     return value
+
+
+def _crc_bytes_for_block(block) -> int:
+    if not block.use_crc:
+        return 0
+    return {
+        "CRC8": 1,
+        "CRC16": 2,
+        "CRC32": 4,
+    }[block.crc_type]

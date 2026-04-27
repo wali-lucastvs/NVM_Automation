@@ -47,6 +47,12 @@ Located in `input/nvm_blocks.json`. Structure:
 - `default_data`: Array of default values (integers 0-255)
 - `nvram_block_identifier`: AUTOSAR identifier (string)
 
+
+***NOTE***
+          "NATIVE"	  -> 1 copy   -> 	Single block, no redundancy
+          "REDUNDANT"	-> 2 copies ->	Dual blocks for fault tolerance
+          "DATASET"	  -> 2 copies ->	Multiple dataset block
+
 ### Excel Input Structure
 Located in `input/NVM_Data.xlsx`. Columns:
 - ID: Block ID

@@ -15,6 +15,7 @@ from nvm_tool import (
     ensure_workspace,
     format_cli_command,
     generate_artifacts,
+    summarize_memory_usage,
 )
 
 APP_NAME = "AUTOSAR NvM Automation Tool"
@@ -92,6 +93,7 @@ class NvMDesktopApp:
         self.verbose_var = tk.BooleanVar(value=False)
         self.command_preview_var = tk.StringVar(value="Select a command button to preview the equivalent CLI command.")
         self.detected_type_var = tk.StringVar(value="No input file selected")
+        self.memory_usage_var = tk.StringVar(value="Select a valid input to estimate NvM usage.")
         self.status_var = tk.StringVar(value="Ready")
         self.current_operation_key = "generate_json"
         self.message_queue: queue.Queue[str] = queue.Queue()
@@ -129,7 +131,7 @@ class NvMDesktopApp:
         outer = ttk.Frame(self.root, padding=16)
         outer.pack(fill=tk.BOTH, expand=True)
         outer.columnconfigure(0, weight=1)
-        outer.rowconfigure(4, weight=1)
+        outer.rowconfigure(5, weight=1)
 
         header = ttk.Frame(outer)
         header.grid(row=0, column=0, sticky="ew")
@@ -186,8 +188,18 @@ class NvMDesktopApp:
             sticky="e",
         )
 
+        memory_frame = ttk.LabelFrame(outer, text="NvM Memory Usage", padding=12)
+        memory_frame.grid(row=3, column=0, sticky="ew", pady=(0, 12))
+        memory_frame.columnconfigure(0, weight=1)
+        ttk.Label(
+            memory_frame,
+            textvariable=self.memory_usage_var,
+            justify="left",
+            wraplength=880,
+        ).grid(row=0, column=0, sticky="w")
+
         commands_frame = ttk.LabelFrame(outer, text="README Commands", padding=12)
-        commands_frame.grid(row=3, column=0, sticky="ew", pady=(0, 12))
+        commands_frame.grid(row=4, column=0, sticky="ew", pady=(0, 12))
         for column in range(3):
             commands_frame.columnconfigure(column, weight=1)
 
@@ -221,7 +233,7 @@ class NvMDesktopApp:
         ).grid(row=2, column=2, sticky="ew", padx=6, pady=6)
 
         preview_frame = ttk.LabelFrame(outer, text="Command Preview", padding=12)
-        preview_frame.grid(row=4, column=0, sticky="nsew")
+        preview_frame.grid(row=5, column=0, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(2, weight=1)
         ttk.Label(
@@ -503,9 +515,33 @@ class NvMDesktopApp:
             if self.verbose_var.get():
                 preview.append("--verbose")
             self.command_preview_var.set(" ".join(preview))
+            self.memory_usage_var.set("Select a valid input to estimate NvM usage.")
             return
 
         self.command_preview_var.set(format_cli_command(request))
+        self._refresh_memory_usage(request)
+
+    def _refresh_memory_usage(self, request: GenerationRequest) -> None:
+        try:
+            summary = summarize_memory_usage(request)
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            self.memory_usage_var.set(f"Unable to estimate NvM usage: {exc}")
+            return
+
+        self.memory_usage_var.set(
+            " | ".join(
+                [
+                    f"Blocks: {summary.block_count}",
+                    f"Payload: {summary.total_payload_bytes} bytes",
+                    (
+                        f"Estimated storage: {summary.total_estimated_storage_bytes} bytes "
+                        f"(CRC overhead: {summary.total_crc_bytes} bytes)"
+                    ),
+                    f"FEE: {summary.fee_estimated_storage_bytes} bytes",
+                    f"EA: {summary.ea_estimated_storage_bytes} bytes",
+                ]
+            )
+        )
 
     def _drain_log_queue(self) -> None:
         while True:
