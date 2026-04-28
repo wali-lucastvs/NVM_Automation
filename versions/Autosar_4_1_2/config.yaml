@@ -1,0 +1,6 @@
+namespace: "http://autosar.org/schema/r4.1"
+xsd: "AUTOSAR_4-1-2.xsd"
+features:
+  nvm_crc_support: true
+  dataset_blocks: true
+  nv_block_base_number: true

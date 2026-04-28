@@ -109,6 +109,81 @@ python generate_nvm.py --input-type excel --input-file workspace/input/NVM_Data.
 
 ---
 
+## Versioned Generation (select AUTOSAR version)
+
+This repository includes a version-driven generator that lets you choose the target AUTOSAR schema/profile at runtime. Version profiles live under the `versions/` folder (examples: `Autosar_4_0_1`, `Autosar_4_0_2`, `Autosar_4_1_1`, ...).
+
+Notes:
+- The `versions/*/config.yaml` files map the XML namespace, XSD filename, and feature flags used by the Jinja2 templates.
+- Placeholder XSDs are included under `versions/` for local validation. Replace these with official AUTOSAR XSDs if you need strict compliance.
+
+### Install dependencies (if not already done)
+
+```powershell
+pip install -r requirements.txt
+```
+
+### CLI — Generate for a selected AUTOSAR version
+
+Example (JSON input):
+
+```powershell
+python generate_nvm_versioned.py \
+  --input-type json \
+  --input-file workspace/input/nvm_blocks.json \
+  --autosar-version Autosar_4_0_2 \
+  --output workspace/output
+```
+
+With previous ARXML and update mode:
+
+```powershell
+python generate_nvm_versioned.py \
+  --input-type json \
+  --input-file workspace/input/nvm_blocks.json \
+  --previous-arxml workspace/input/NvM.arxml \
+  --autosar-version Autosar_4_0_2 \
+  --output workspace/output \
+  --allow-update --verbose
+```
+
+### GUI — Versioned desktop app
+
+Start a lightweight GUI where you can pick the AUTOSAR version from a dropdown, choose an input file, and generate:
+
+```powershell
+python nvm_gui_versioned.py
+```
+
+The GUI shows a status panel and writes the generated `NvM.arxml` to the selected output directory.
+
+### List available AUTOSAR profiles
+
+The available versions are the directory names under `versions/`. Example names shipped with this repo:
+
+```
+Autosar_4_0_1
+Autosar_4_0_2
+Autosar_4_0_3
+Autosar_4_1_1
+Autosar_4_1_2
+Autosar_4_1_3
+Autosar_4_2_1
+Autosar_4_2_2
+Autosar_4_3_0
+```
+
+### Run tests (optional)
+
+If you use pytest to run the included smoke test:
+
+```powershell
+pip install pytest
+pytest -q
+```
+
+---
+
 ## All Available Commands
 
 ### 1. Generate from JSON (Basic)
@@ -527,3 +602,23 @@ Expantion of this use case for FEE , Flash and MemIf
 For issues, feature requests, or questions, please contact the tool author.
 
 **Author:** S M Wali Haider Zaidi
+
+---
+
+## Packaging the Versioned GUI
+
+To create a single Windows executable that bundles the versioned GUI (`nvm_gui_versioned.py`) and the `versions/` profiles, run:
+
+```powershell
+pip install -r requirements-dev.txt
+powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
+```
+
+What the script does:
+- Uses PyInstaller to create a single-file, windowed executable named `NvMAutomationTool.exe`.
+- Bundles the `versions/` folder (profiles and XSD placeholders) and the `workspace/` folder into the exe.
+
+Notes:
+- If you want strict XSD validation with official AUTOSAR schemas, replace the placeholder XSDs in `versions/*` with the official XSD files before packaging.
+- The packaged exe runs the versioned GUI by default. The CLI scripts (`generate_nvm_versioned.py`) remain available for development and CI.
+
