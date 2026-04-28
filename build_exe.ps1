@@ -29,7 +29,7 @@ New-Item -ItemType Directory -Path $stageDistDir -Force | Out-Null
 New-Item -ItemType Directory -Path $specDir -Force | Out-Null
 New-Item -ItemType Directory -Path $publishDir -Force | Out-Null
 
-# Package the versioned GUI entrypoint (nvm_gui_versioned.py) and include versions/ folder
+# Package the main GUI entrypoint (NVM_GUI.py) and include versions/ folder
 python -m PyInstaller `
     --noconfirm `
     --clean `
@@ -39,13 +39,13 @@ python -m PyInstaller `
     --distpath $stageDistDir `
     --workpath $buildDir `
     --specpath $specDir `
-    --add-data "versions;versions" `
-    --add-data "workspace;workspace" `
+    --add-data "$projectRoot\versions;versions" `
+    --add-data "$projectRoot\workspace;workspace" `
     --hidden-import jinja2 `
     --hidden-import lxml.etree `
     --hidden-import yaml `
     --hidden-import openpyxl `
-    nvm_gui_versioned.py
+    nvm_gui.py
 
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed. Check the output above for the exact packaging error."

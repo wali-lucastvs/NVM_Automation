@@ -91,6 +91,7 @@ class NvMDesktopApp:
         self.previous_arxml_var = tk.StringVar()
         self.output_dir_var = tk.StringVar(value=str(self.workspace.output_dir))
         self.verbose_var = tk.BooleanVar(value=False)
+        self.autosar_version_var = tk.StringVar()
         self.command_preview_var = tk.StringVar(value="Select a command button to preview the equivalent CLI command.")
         self.detected_type_var = tk.StringVar(value="No input file selected")
         self.memory_usage_var = tk.StringVar(value="Select a valid input to estimate NvM usage.")
@@ -102,9 +103,12 @@ class NvMDesktopApp:
         self.input_file_var.trace_add("write", self._on_input_path_changed)
         self.previous_arxml_var.trace_add("write", self._on_form_field_changed)
         self.output_dir_var.trace_add("write", self._on_form_field_changed)
+        self.autosar_version_var.trace_add("write", self._on_form_field_changed)
+
         self._configure_styles()
         self._build_menu()
         self._build_layout()
+        self._load_versions()
         self._select_operation("generate_json", update_log=False)
         self.root.after(100, self._drain_log_queue)
 
@@ -166,6 +170,11 @@ class NvMDesktopApp:
         ttk.Entry(files_frame, textvariable=self.output_dir_var).grid(row=3, column=1, sticky="ew", pady=6)
         ttk.Frame(files_frame).grid(row=3, column=2, sticky="ew")
         ttk.Button(files_frame, text="Browse", command=self._browse_output_dir).grid(row=3, column=2, sticky="ew", pady=6)
+
+        ttk.Label(files_frame, text="AUTOSAR Version").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=6)
+        self.version_combo = ttk.Combobox(files_frame, textvariable=self.autosar_version_var, state="readonly")
+        self.version_combo.grid(row=4, column=1, sticky="ew", pady=6)
+        ttk.Label(files_frame, text="(Optional)", style="Subtle.TLabel").grid(row=4, column=2, sticky="w", padx=4)
 
         options_frame = ttk.LabelFrame(outer, text="Options", padding=12)
         options_frame.grid(row=2, column=0, sticky="ew", pady=(0, 12))
@@ -264,6 +273,14 @@ class NvMDesktopApp:
 
     def _on_form_field_changed(self, *_args: object) -> None:
         self._refresh_command_preview()
+
+    def _load_versions(self) -> None:
+        versions_root = self.workspace.application_root / "versions"
+        if versions_root.exists():
+            versions = [p.name for p in versions_root.iterdir() if p.is_dir() and (p / "config.yaml").exists()]
+            self.version_combo['values'] = sorted(versions)
+            if versions:
+                self.autosar_version_var.set(sorted(versions)[0])
 
     def _browse_input(self) -> None:
         path = filedialog.askopenfilename(
@@ -485,6 +502,7 @@ class NvMDesktopApp:
             output_dir=Path(output_dir),
             verbose=self.verbose_var.get(),
             allow_update=operation["allow_update"],
+            autosar_version=self.autosar_version_var.get().strip() or None,
         )
 
     def _select_operation(self, operation_key: str, update_log: bool = True) -> None:
@@ -512,6 +530,9 @@ class NvMDesktopApp:
                 preview.extend(["--previous-arxml", "<select NvM.arxml>"])
             if operation["allow_update"]:
                 preview.append("--allow-update")
+            version = self.autosar_version_var.get().strip()
+            if version:
+                preview.extend(["--autosar-version", version])
             if self.verbose_var.get():
                 preview.append("--verbose")
             self.command_preview_var.set(" ".join(preview))

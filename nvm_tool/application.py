@@ -19,6 +19,7 @@ class GenerationRequest:
     previous_arxml: Optional[Path] = None
     verbose: bool = False
     allow_update: bool = False
+    autosar_version: Optional[str] = None
 
     def normalized(self) -> "GenerationRequest":
         normalized_input_type = self.input_type.strip().lower()
@@ -34,6 +35,7 @@ class GenerationRequest:
             previous_arxml=Path(self.previous_arxml) if self.previous_arxml is not None else None,
             verbose=self.verbose,
             allow_update=self.allow_update,
+            autosar_version=self.autosar_version,
         )
 
 
@@ -104,6 +106,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow updating existing blocks with the same ID or name instead of rejecting them.",
     )
+    parser.add_argument(
+        "--autosar-version",
+        required=False,
+        help="Target AUTOSAR version (e.g., Autosar_4_0_2).",
+    )
     return parser
 
 
@@ -124,13 +131,27 @@ def generate_artifacts(
     if normalized_request.previous_arxml:
         previous_document = parser.parse_previous_arxml(normalized_request.previous_arxml)
 
-    generator = NvMGenerator(
-        blocks=input_blocks,
-        previous_document=previous_document,
-        allow_update=normalized_request.allow_update,
-        logger=logger,
-    )
-    generator.generate(normalized_request.output_dir)
+    if normalized_request.autosar_version:
+        from .versioning import load_version_profile
+        from .engine_versioned import generate as generate_versioned
+        profile = load_version_profile(normalized_request.autosar_version)
+        generator = generate_versioned(
+            blocks=input_blocks,
+            output=normalized_request.output_dir,
+            version=profile,
+            previous_document=previous_document,
+            allow_update=normalized_request.allow_update,
+            logger=logger,
+        )
+    else:
+        generator = NvMGenerator(
+            blocks=input_blocks,
+            previous_document=previous_document,
+            allow_update=normalized_request.allow_update,
+            logger=logger,
+        )
+        generator.generate(normalized_request.output_dir)
+
     return [
         normalized_request.output_dir / "NvM_Cfg.c",
         normalized_request.output_dir / "NvM_Cfg.h",
@@ -207,6 +228,7 @@ def run_cli(argv: Optional[Sequence[str]] = None) -> int:
                 output_dir=args.output,
                 verbose=args.verbose,
                 allow_update=args.allow_update,
+                autosar_version=args.autosar_version,
             )
         )
     except (FileNotFoundError, ValueError, RuntimeError) as exc:
@@ -246,6 +268,8 @@ def format_cli_command(request: GenerationRequest) -> str:
         parts.extend(["--previous-arxml", str(normalized_request.previous_arxml)])
     if normalized_request.allow_update:
         parts.append("--allow-update")
+    if normalized_request.autosar_version:
+        parts.extend(["--autosar-version", normalized_request.autosar_version])
     if normalized_request.verbose:
         parts.append("--verbose")
     return " ".join(_quote_for_powershell(part) for part in parts)

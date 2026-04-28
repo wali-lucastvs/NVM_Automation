@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Optional
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from lxml import etree
@@ -11,6 +11,7 @@ from lxml import etree
 from .rules import validate_blocks
 from .generator import NvMGenerator
 from .versioning import VersionProfile
+from .models import ParsedArxmlDocument
 
 
 def _build_validation_document(rendered: str) -> etree._ElementTree:
@@ -18,7 +19,14 @@ def _build_validation_document(rendered: str) -> etree._ElementTree:
     return etree.fromstring(rendered.encode("utf-8"), parser)
 
 
-def generate(blocks: Iterable, output: Path, version: VersionProfile, logger: logging.Logger | None = None) -> Path:
+def generate(
+    blocks: Iterable, 
+    output: Path, 
+    version: VersionProfile, 
+    previous_document: Optional[ParsedArxmlDocument] = None,
+    allow_update: bool = False,
+    logger: logging.Logger | None = None
+) -> Path:
     """Generate ARXML and C artifacts for the given AUTOSAR version.
 
     This function is bundle-aware (PyInstaller) and resolves templates/XSDs from sys._MEIPASS
@@ -26,8 +34,12 @@ def generate(blocks: Iterable, output: Path, version: VersionProfile, logger: lo
     """
     logger = logger or logging.getLogger("nvm_versioned_engine")
 
-    # Ensure semantic rules pass
-    validate_blocks(blocks)
+    # Ensure blocks are resolved if merging is requested
+    if previous_document is not None:
+        resolver = NvMGenerator(blocks=blocks, previous_document=previous_document, allow_update=allow_update, logger=logger)
+        blocks = resolver.resolve_blocks()
+    else:
+        validate_blocks(blocks)
 
     # Resolve template and xsd locations (bundle-aware)
     if getattr(sys, "_MEIPASS", None):
