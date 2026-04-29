@@ -15,6 +15,11 @@ class WorkspaceLayout:
 
 def get_application_root() -> Path:
     if getattr(sys, "frozen", False):
+        # When bundled by PyInstaller, data files are extracted to sys._MEIPASS.
+        # Prefer that location if available so bundled data (versions/, workspace/) is found.
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            return Path(meipass)
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
 

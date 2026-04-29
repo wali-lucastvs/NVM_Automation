@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 import yaml
 
 
@@ -15,7 +16,12 @@ class VersionProfile:
 
 
 def load_version_profile(key: str) -> VersionProfile:
-    root = Path(__file__).resolve().parent.parent
+    # Resolve versions directory relative to the package. When bundled with
+    # PyInstaller, data is extracted to sys._MEIPASS, so prefer that when present.
+    if getattr(sys, "frozen", False) and getattr(sys, "_MEIPASS", None):
+        root = Path(sys._MEIPASS)
+    else:
+        root = Path(__file__).resolve().parent.parent
     versions_dir = root / "versions"
     folder_name = key
     folder = versions_dir / folder_name

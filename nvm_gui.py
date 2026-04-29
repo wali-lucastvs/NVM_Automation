@@ -17,6 +17,9 @@ from nvm_tool import (
     generate_artifacts,
     summarize_memory_usage,
 )
+from nvm_tool import NvMConfigParser
+from nvm_tool.versioning import load_version_profile
+from nvm_tool.engine_versioned import generate as generate_versioned
 
 APP_NAME = "AUTOSAR NvM Automation Tool"
 APP_DESCRIPTION = "A tool for automating AUTOSAR NvM workflows."
@@ -29,6 +32,9 @@ APP_PRIVACY_POLICY = (
     "This application does not collect, store, or transmit any personal data. "
     "All processing is performed locally on the user's machine."
 )
+
+# Preferred default AUTOSAR profile key for the GUI dropdown.
+DEFAULT_AUTOSAR_VERSION = "Autosar_4_0_2"
 
 
 class QueueLogHandler(logging.Handler):
@@ -280,7 +286,12 @@ class NvMDesktopApp:
             versions = [p.name for p in versions_root.iterdir() if p.is_dir() and (p / "config.yaml").exists()]
             self.version_combo['values'] = sorted(versions)
             if versions:
-                self.autosar_version_var.set(sorted(versions)[0])
+                sorted_versions = sorted(versions)
+                # Prefer a sensible default if present, otherwise pick the first sorted entry.
+                if DEFAULT_AUTOSAR_VERSION in sorted_versions:
+                    self.autosar_version_var.set(DEFAULT_AUTOSAR_VERSION)
+                else:
+                    self.autosar_version_var.set(sorted_versions[0])
 
     def _browse_input(self) -> None:
         path = filedialog.askopenfilename(
@@ -464,7 +475,16 @@ class NvMDesktopApp:
         handler = QueueLogHandler(self.message_queue)
         handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
         try:
-            generated_files = generate_artifacts(request, log_handler=handler)
+            # If a version is selected and no previous ARXML is provided, use the
+            # versioned generator (per-version templates + XSD validation).
+            if self.autosar_version_var.get().strip() and request.previous_arxml is None:
+                profile = load_version_profile(self.autosar_version_var.get().strip())
+                parser = NvMConfigParser(logger=logging.getLogger("nvm_gui"))
+                blocks = parser.parse_input_file(request.input_type, request.input_file)
+                out_file = generate_versioned(blocks, request.output_dir, profile, logger=logging.getLogger("nvm_gui"))
+                generated_files = [request.output_dir / "NvM_Cfg.c", request.output_dir / "NvM_Cfg.h", out_file]
+            else:
+                generated_files = generate_artifacts(request, log_handler=handler)
         except Exception as exc:  # noqa: BLE001
             self.message_queue.put(f"ERROR: {exc}")
             self.message_queue.put("__STATUS__:Generation failed")
@@ -502,7 +522,6 @@ class NvMDesktopApp:
             output_dir=Path(output_dir),
             verbose=self.verbose_var.get(),
             allow_update=operation["allow_update"],
-            autosar_version=self.autosar_version_var.get().strip() or None,
         )
 
     def _select_operation(self, operation_key: str, update_log: bool = True) -> None:

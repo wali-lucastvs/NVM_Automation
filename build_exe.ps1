@@ -54,8 +54,19 @@ if ($LASTEXITCODE -ne 0) {
 $stagedExe = Join-Path $stageDistDir "NvMAutomationTool.exe"
 $publishedExe = Join-Path $publishDir "NvMAutomationTool.exe"
 
-Get-ChildItem -LiteralPath $publishDir -File -ErrorAction SilentlyContinue | Remove-Item -Force
-Copy-Item -LiteralPath $stagedExe -Destination $publishedExe -Force
+Get-ChildItem -LiteralPath $publishDir -File -ErrorAction SilentlyContinue | ForEach-Object {
+    try {
+        Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+    } catch {
+        Write-Host "Warning: Could not remove $($_.FullName): $($_.Exception.Message)"
+    }
+}
+
+try {
+    Copy-Item -LiteralPath $stagedExe -Destination $publishedExe -Force -ErrorAction Stop
+} catch {
+    throw "Failed to publish executable: $($_.Exception.Message)"
+}
 
 Write-Host ""
 Write-Host "Build completed."
