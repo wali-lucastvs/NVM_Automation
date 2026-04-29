@@ -1,0 +1,46 @@
+{
+  "blocks": [
+    {
+      "block_name": "EngineSettings",
+      "block_id": 20,
+      "block_size": 128,
+      "ram_block_name": "Ram_EngineSettings",
+      "device": "FEE",
+      "block_management_type": "NATIVE",
+      "use_crc": true,
+      "crc_type": "CRC16",
+      "write_protection": false,
+      "device_id": 0,
+      "nv_block_base_number": 20,
+      "nv_block_num": 1
+    },
+    {
+      "block_name": "OdometerMirror",
+      "block_id": 21,
+      "block_size": 32,
+      "ram_block_name": "Ram_OdometerMirror",
+      "device": "EA",
+      "block_management_type": "REDUNDANT",
+      "use_crc": true,
+      "crc_type": "CRC32",
+      "write_protection": true,
+      "device_id": 1,
+      "nv_block_base_number": 21,
+      "nv_block_num": 2
+    },
+    {
+      "block_name": "DiagnosticSnapshot",
+      "block_id": 22,
+      "block_size": 64,
+      "ram_block_name": "Ram_DiagnosticSnapshot",
+      "device": "FEE",
+      "block_management_type": "DATASET",
+      "use_crc": true,
+      "crc_type": "CRC16",
+      "write_protection": false,
+      "device_id": 0,
+      "nv_block_base_number": 22,
+      "nv_block_num": 2
+    }
+  ]
+}
