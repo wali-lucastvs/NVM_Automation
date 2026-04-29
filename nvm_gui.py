@@ -18,8 +18,8 @@ from nvm_tool import (
     summarize_memory_usage,
 )
 from nvm_tool import NvMConfigParser
-from nvm_tool.versioning import load_version_profile
-from nvm_tool.engine_versioned import generate as generate_versioned
+from nvm_tool.config import load_version_profile
+from nvm_tool.generator import generate as generate_versioned
 
 APP_NAME = "AUTOSAR NvM Automation Tool"
 APP_DESCRIPTION = "A tool for automating AUTOSAR NvM workflows."
@@ -481,7 +481,13 @@ class NvMDesktopApp:
                 profile = load_version_profile(self.autosar_version_var.get().strip())
                 parser = NvMConfigParser(logger=logging.getLogger("nvm_gui"))
                 blocks = parser.parse_input_file(request.input_type, request.input_file)
-                out_file = generate_versioned(blocks, request.output_dir, profile, logger=logging.getLogger("nvm_gui"))
+                out_file = generate_versioned(
+                    blocks,
+                    request.output_dir,
+                    profile,
+                    logger=logging.getLogger("nvm_gui"),
+                    versioned=True,
+                )
                 generated_files = [request.output_dir / "NvM_Cfg.c", request.output_dir / "NvM_Cfg.h", out_file]
             else:
                 generated_files = generate_artifacts(request, log_handler=handler)
@@ -537,7 +543,8 @@ class NvMDesktopApp:
             operation = self.OPERATIONS[self.current_operation_key]
             preview = [
                 "python",
-                "generate_nvm.py",
+                "main.py",
+                "generate",
                 "--input-type",
                 operation["input_type"],
                 "--input-file",

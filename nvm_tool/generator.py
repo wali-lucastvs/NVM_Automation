@@ -3,8 +3,12 @@ from __future__ import annotations
 from copy import deepcopy
 import logging
 from pathlib import Path
+import sys
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 from xml.etree import ElementTree as ET
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from lxml import etree
 
 from .models import (
     AUTOSAR_XSI_NAMESPACE,
@@ -14,6 +18,7 @@ from .models import (
     NvMBlock,
     ParsedArxmlDocument,
 )
+from .rules import validate_blocks
 
 
 class NvMGenerator:
@@ -459,3 +464,134 @@ class NvMGenerator:
     @staticmethod
     def _tag(local_name: str, namespace: str) -> str:
         return f"{{{namespace}}}{local_name}"
+
+
+def _build_validation_document(rendered: str) -> etree._ElementTree:
+    parser = etree.XMLParser(remove_blank_text=True)
+    return etree.fromstring(rendered.encode("utf-8"), parser)
+
+
+def _strip_namespaces_for_validation(document: etree._ElementTree) -> etree._ElementTree:
+    normalized = deepcopy(document)
+    for element in normalized.iter():
+        if isinstance(element.tag, str) and element.tag.startswith("{"):
+            element.tag = element.tag.split("}", 1)[1]
+        element.attrib.clear()
+    etree.cleanup_namespaces(normalized)
+    return normalized
+
+
+def generate(
+    blocks: Iterable[NvMBlock],
+    output: Path,
+    version=None,
+    previous_document: Optional[ParsedArxmlDocument] = None,
+    allow_update: bool = False,
+    logger: logging.Logger | None = None,
+    versioned: bool = False,
+) -> Path:
+    logger = logger or logging.getLogger("nvm_generator")
+
+    if not versioned and version is None:
+        generator = NvMGenerator(
+            blocks=blocks,
+            previous_document=previous_document,
+            allow_update=allow_update,
+            logger=logger,
+        )
+        generator.generate(output)
+        return Path(output) / "NvM.arxml"
+
+    if version is None:
+        raise ValueError("A version profile is required when versioned generation is enabled.")
+
+    if previous_document is not None:
+        resolver = NvMGenerator(
+            blocks=blocks,
+            previous_document=previous_document,
+            allow_update=allow_update,
+            logger=logger,
+        )
+        blocks = resolver.resolve_blocks()
+    else:
+        validate_blocks(blocks)
+
+    if getattr(sys, "_MEIPASS", None):
+        bundle_root = Path(sys._MEIPASS)
+        common_templates = bundle_root / "versions" / "common"
+        version_folder = bundle_root / "versions" / version.key
+    else:
+        repo_root = Path(__file__).resolve().parent.parent
+        common_templates = repo_root / "versions" / "common"
+        version_folder = repo_root / "versions" / version.key
+
+    loader_paths = []
+    if common_templates.exists():
+        loader_paths.append(str(common_templates))
+    if version_folder.exists():
+        loader_paths.append(str(version_folder))
+
+    env = Environment(
+        loader=FileSystemLoader(
+            loader_paths or [str(version.folder / ".." / "common"), str(version.folder)]
+        ),
+        autoescape=select_autoescape([]),
+        keep_trailing_newline=True,
+        trim_blocks=True,
+        lstrip_blocks=True,
+    )
+
+    template = env.get_template("template.arxml.jinja")
+    resolved_blocks = list(blocks)
+    rendered = template.render(
+        namespace=version.namespace,
+        xsd=Path(version.xsd).name,
+        blocks=resolved_blocks,
+        features=type("F", (), version.features),
+    )
+
+    if getattr(sys, "_MEIPASS", None):
+        xsd_path = Path(sys._MEIPASS) / "versions" / version.key / Path(version.xsd).name
+    else:
+        xsd_path = Path(version.xsd)
+
+    if not xsd_path.exists():
+        raise FileNotFoundError(f"XSD for selected version not found: {xsd_path}")
+
+    schema_doc = etree.parse(str(xsd_path))
+    schema = etree.XMLSchema(schema_doc)
+
+    try:
+        validation_doc = _build_validation_document(rendered)
+        schema_root = schema_doc.getroot()
+        if not schema_root.get("targetNamespace"):
+            validation_doc = _strip_namespaces_for_validation(validation_doc)
+        schema.assertValid(validation_doc)
+    except etree.DocumentInvalid as exc:
+        raise RuntimeError(f"ARXML does not conform to XSD: {exc}") from exc
+
+    out_dir = Path(output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = NvMGenerator(
+        blocks=resolved_blocks,
+        previous_document=None,
+        allow_update=False,
+        logger=logger,
+    )
+    header = generator.render_header(resolved_blocks)
+    source = generator.render_source(resolved_blocks)
+
+    header_file = out_dir / "NvM_Cfg.h"
+    source_file = out_dir / "NvM_Cfg.c"
+    arxml_file = out_dir / "NvM.arxml"
+
+    header_file.write_text(header, encoding="utf-8", newline="\n")
+    source_file.write_text(source, encoding="utf-8", newline="\n")
+    arxml_file.write_text(rendered, encoding="utf-8", newline="\n")
+
+    logger.info("Written versioned header to %s", header_file)
+    logger.info("Written versioned source to %s", source_file)
+    logger.info("Written versioned ARXML to %s", arxml_file)
+
+    return arxml_file

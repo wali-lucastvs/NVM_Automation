@@ -6,9 +6,9 @@ import uuid
 import unittest
 
 from nvm_tool.generator import NvMGenerator
+from nvm_tool.generator import generate
 from nvm_tool.parser import NvMConfigParser
-from nvm_tool.versioning import load_version_profile
-from nvm_tool.engine_versioned import generate
+from nvm_tool.config import load_version_profile
 
 
 def sample_payload() -> list[dict[str, object]]:
@@ -59,7 +59,7 @@ class VersionedGenerationTests(unittest.TestCase):
             with self.subTest(version=version_key):
                 output_dir = self._make_temp_dir()
                 profile = load_version_profile(version_key)
-                arxml_path = generate(blocks, output_dir, profile)
+                arxml_path = generate(blocks, output_dir, profile, versioned=True)
 
                 self.assertEqual(arxml_path, output_dir / "NvM.arxml")
                 self.assertTrue((output_dir / "NvM.arxml").exists())
@@ -111,6 +111,7 @@ class VersionedGenerationTests(unittest.TestCase):
             output_dir,
             load_version_profile("Autosar_4_2_2"),
             previous_document=previous_document,
+            versioned=True,
         )
 
         arxml_text = (output_dir / "NvM.arxml").read_text(encoding="utf-8")
@@ -125,7 +126,12 @@ class VersionedGenerationTests(unittest.TestCase):
         blocks = parser.parse_input_file("json", input_path)
 
         with self.assertRaisesRegex(ValueError, "must enable CRC"):
-            generate(blocks, self._make_temp_dir(), load_version_profile("Autosar_4_0_2"))
+            generate(
+                blocks,
+                self._make_temp_dir(),
+                load_version_profile("Autosar_4_0_2"),
+                versioned=True,
+            )
 
     def test_unknown_version_is_rejected(self) -> None:
         with self.assertRaisesRegex(FileNotFoundError, "Version folder not found"):

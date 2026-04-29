@@ -8,8 +8,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from nvm_tool import NvMConfigParser
-from nvm_tool.versioning import load_version_profile
-from nvm_tool.engine_versioned import generate
+from nvm_tool.config import load_version_profile
+from nvm_tool.generator import generate
 
 
 class NvMVersionedApp:
@@ -81,7 +81,7 @@ class NvMVersionedApp:
         try:
             blocks = parser.parse_input_file("json" if input_file.endswith(".json") else "excel", input_file)
             profile = load_version_profile(version_key)
-            out = generate(blocks, output, profile, logger=logger)
+            out = generate(blocks, output, profile, logger=logger, versioned=True)
             self.message_queue.put(f"INFO: Generated {output / 'NvM_Cfg.h'}, {output / 'NvM_Cfg.c'}, {out}")
             self.message_queue.put("__STATUS__:Completed")
         except Exception as exc:
