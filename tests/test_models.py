@@ -9,9 +9,7 @@ from nvm_tool import default_output_dir, ensure_workspace
 from nvm_tool.models import (
     GenerationRequest,
     NvMBlock,
-    build_argument_parser,
     detect_input_type,
-    format_cli_command,
     generate_artifacts,
     summarize_memory_usage,
 )
@@ -43,20 +41,6 @@ class ModelSurfaceTests(unittest.TestCase):
         self.assertEqual(detect_input_type("demo.xlsx"), "excel")
         self.assertEqual(detect_input_type("demo.xlsm"), "excel")
         self.assertIsNone(detect_input_type("demo.txt"))
-
-    def test_format_cli_command_uses_unified_entry_point(self) -> None:
-        command = format_cli_command(
-            GenerationRequest(
-                input_type="json",
-                input_file=Path(r"C:\input files\NvM.json"),
-                output_dir=Path(r"C:\output folder"),
-                verbose=True,
-            )
-        )
-
-        self.assertIn("-m nvm_app.cli", command)
-        self.assertIn("generate", command)
-        self.assertIn("--verbose", command)
 
     def test_nvm_block_defaults_are_derived(self) -> None:
         block = NvMBlock.from_mapping(
@@ -102,19 +86,9 @@ class ModelSurfaceTests(unittest.TestCase):
         for file_path in generated_files:
             self.assertTrue(file_path.exists(), file_path)
 
-    def test_cli_defaults_to_shared_workspace_output_directory(self) -> None:
+    def test_default_workspace_output_directory_is_shared(self) -> None:
         layout = ensure_workspace()
-        parsed_args = build_argument_parser().parse_args(
-            [
-                "--input-type",
-                "json",
-                "--input-file",
-                str(layout.input_dir / "nvm_blocks.json"),
-            ]
-        )
-
-        self.assertEqual(parsed_args.output, default_output_dir())
-        self.assertEqual(parsed_args.output, layout.output_dir)
+        self.assertEqual(default_output_dir(), layout.output_dir)
 
     def test_summarize_memory_usage_for_fresh_input(self) -> None:
         workspace = self._make_temp_dir()

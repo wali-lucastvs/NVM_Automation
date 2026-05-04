@@ -6,6 +6,8 @@ import sys
 
 import yaml
 
+from .versioning import canonical_version_label, normalize_version_key
+
 
 @dataclass(frozen=True)
 class WorkspaceLayout:
@@ -18,10 +20,15 @@ class WorkspaceLayout:
 @dataclass(frozen=True)
 class VersionProfile:
     key: str
+    version: str
     namespace: str
     xsd: str
     features: dict
     folder: Path
+
+    @property
+    def xsd_name(self) -> str:
+        return Path(self.xsd).name
 
 
 @dataclass(frozen=True)
@@ -40,7 +47,10 @@ def get_application_root() -> Path:
 
 
 def get_workspace_layout(base_dir: str | Path | None = None) -> WorkspaceLayout:
-    application_root = Path(base_dir).resolve() if base_dir is not None else get_application_root()
+    # Prefer the current working directory (the opened project folder) by default so
+    # CLI and GUI use: <current working dir>/workspace/output instead of the packaged
+    # application's installation folder. A caller can still override base_dir.
+    application_root = Path(base_dir).resolve() if base_dir is not None else Path.cwd()
     workspace_root = application_root / "workspace"
     return WorkspaceLayout(
         application_root=application_root,
@@ -67,7 +77,8 @@ def default_output_dir() -> Path:
 
 def load_version_profile(key: str, versions_dir: str | Path | None = None) -> VersionProfile:
     root = Path(versions_dir).resolve() if versions_dir is not None else get_application_root() / "versions"
-    folder = root / key
+    resolved_key = normalize_version_key(key)
+    folder = root / resolved_key
     if not folder.exists():
         raise FileNotFoundError(f"Version folder not found: {folder}")
 
@@ -83,7 +94,8 @@ def load_version_profile(key: str, versions_dir: str | Path | None = None) -> Ve
         schema_path = folder / cfg.get("xsd")
 
     return VersionProfile(
-        key=key,
+        key=resolved_key,
+        version=canonical_version_label(key if key.count(".") == 2 else resolved_key),
         namespace=cfg.get("namespace", "http://autosar.org/schema/r4.0"),
         xsd=str(schema_path),
         features=cfg.get("features", {}),

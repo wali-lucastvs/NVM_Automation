@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import uuid
 import unittest
+from xml.etree import ElementTree as ET
 
 from nvm_tool.generator import NvMGenerator
 from nvm_tool.generator import generate
@@ -50,9 +51,9 @@ class VersionedGenerationTests(unittest.TestCase):
         blocks = parser.parse_input_file("json", input_path)
 
         expectations = {
-            "Autosar_4_0_2": "http://autosar.org/schema/r4.0",
+            "4.0.2": "http://autosar.org/schema/r4.0",
             "Autosar_4_1_1": "http://autosar.org/schema/r4.1",
-            "Autosar_4_3_0": "http://autosar.org/schema/r4.3",
+            "4.3.0": "http://autosar.org/schema/r4.3",
         }
 
         for version_key, namespace in expectations.items():
@@ -120,6 +121,28 @@ class VersionedGenerationTests(unittest.TestCase):
         self.assertIn("VersionedBlock", arxml_text)
         self.assertIn("NVM_NUMBER_OF_BLOCKS (2u)", header_text)
 
+    def test_versioned_402_preserves_legacy_arxml_structure(self) -> None:
+        parser = NvMConfigParser()
+        input_path = self._write_json(sample_payload())
+        blocks = parser.parse_input_file("json", input_path)
+
+        legacy_output_dir = self._make_temp_dir()
+        NvMGenerator(blocks).generate(legacy_output_dir)
+        legacy_tree = ET.fromstring((legacy_output_dir / "NvM.arxml").read_text(encoding="utf-8"))
+
+        versioned_output_dir = self._make_temp_dir()
+        generate(
+            blocks,
+            versioned_output_dir,
+            load_version_profile("4.0.2"),
+            versioned=True,
+        )
+        versioned_tree = ET.fromstring(
+            (versioned_output_dir / "NvM.arxml").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(self._shape(legacy_tree), self._shape(versioned_tree))
+
     def test_dataset_blocks_without_crc_are_rejected(self) -> None:
         parser = NvMConfigParser()
         input_path = self._write_json(dataset_without_crc_payload())
@@ -137,6 +160,22 @@ class VersionedGenerationTests(unittest.TestCase):
         with self.assertRaisesRegex(FileNotFoundError, "Version folder not found"):
             load_version_profile("Autosar_9_9_9")
 
+    def test_version_alias_422_resolves_to_expected_namespace(self) -> None:
+        parser = NvMConfigParser()
+        input_path = self._write_json(sample_payload())
+        blocks = parser.parse_input_file("json", input_path)
+        output_dir = self._make_temp_dir()
+
+        generate(
+            blocks,
+            output_dir,
+            load_version_profile("4.2.2"),
+            versioned=True,
+        )
+
+        arxml_text = (output_dir / "NvM.arxml").read_text(encoding="utf-8")
+        self.assertIn('xmlns="http://autosar.org/schema/r4.2"', arxml_text)
+
     @staticmethod
     def _make_temp_dir() -> Path:
         temp_path = Path(__file__).resolve().parent / "_tmp" / uuid.uuid4().hex
@@ -148,6 +187,14 @@ class VersionedGenerationTests(unittest.TestCase):
         input_path = workspace / "blocks.json"
         input_path.write_text(json.dumps(payload), encoding="utf-8")
         return input_path
+
+    @staticmethod
+    def _shape(element: ET.Element) -> tuple[str, str, list[tuple[str, str, list]]]:
+        return (
+            element.tag.split("}", 1)[-1],
+            (element.text or "").strip(),
+            [VersionedGenerationTests._shape(child) for child in list(element)],
+        )
 
 
 if __name__ == "__main__":

@@ -6,3 +6,4 @@ release/
 tests/_tmp/
 workspace/output/
 .github
+graphify-out

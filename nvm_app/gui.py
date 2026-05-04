@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+import sys
 import queue
 import threading
 import tkinter as tk
@@ -10,13 +11,12 @@ from tkinter import filedialog, messagebox, ttk
 
 from nvm_tool import (
     GenerationRequest,
-    build_argument_parser,
     detect_input_type,
     ensure_workspace,
-    format_cli_command,
     generate_artifacts,
     summarize_memory_usage,
 )
+from nvm_tool.versioning import canonical_version_label
 
 APP_NAME = "AUTOSAR NvM Automation Tool"
 APP_DESCRIPTION = "A tool for automating AUTOSAR NvM workflows."
@@ -29,7 +29,7 @@ APP_PRIVACY_POLICY = (
     "This application does not collect, store, or transmit any personal data. "
     "All processing is performed locally on the user's machine."
 )
-DEFAULT_AUTOSAR_VERSION = "Autosar_4_0_2"
+DEFAULT_AUTOSAR_VERSION = "4.0.2"
 
 
 class QueueLogHandler(logging.Handler):
@@ -96,7 +96,7 @@ class NvMDesktopApp:
         self.output_dir_var = tk.StringVar(value=str(self.workspace.output_dir))
         self.verbose_var = tk.BooleanVar(value=False)
         self.autosar_version_var = tk.StringVar()
-        self.command_preview_var = tk.StringVar(value="Select a command button to preview the equivalent CLI command.")
+        self.workflow_summary_var = tk.StringVar(value="Select a workflow to see the current GUI operation summary.")
         self.detected_type_var = tk.StringVar(value="No input file selected")
         self.memory_usage_var = tk.StringVar(value="Select a valid input to estimate NvM usage.")
         self.status_var = tk.StringVar(value="Ready")
@@ -156,25 +156,30 @@ class NvMDesktopApp:
         files_frame.grid(row=1, column=0, sticky="ew", pady=(16, 12))
         files_frame.columnconfigure(1, weight=1)
 
-        ttk.Label(files_frame, text="Input JSON/Excel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=6)
-        ttk.Entry(files_frame, textvariable=self.input_file_var).grid(row=0, column=1, sticky="ew", pady=6)
-        ttk.Button(files_frame, text="Browse", command=self._browse_input).grid(row=0, column=2, sticky="ew", pady=6)
+        ttk.Label(files_frame, text="AUTOSAR Version").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=6)
+        self.version_combo = ttk.Combobox(
+            files_frame,
+            textvariable=self.autosar_version_var,
+            values=(),
+            state="readonly",
+        )
+        self.version_combo.grid(row=0, column=1, sticky="ew", pady=6)
+        ttk.Label(files_frame, text="Required" if self.versioned_only else "(Optional)", style="Subtle.TLabel").grid(row=0, column=2, sticky="w", padx=4)
 
-        ttk.Label(files_frame, text="Detected input").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=6)
-        ttk.Label(files_frame, textvariable=self.detected_type_var).grid(row=1, column=1, sticky="w", pady=6)
+        ttk.Label(files_frame, text="Input JSON/Excel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Entry(files_frame, textvariable=self.input_file_var).grid(row=1, column=1, sticky="ew", pady=6)
+        ttk.Button(files_frame, text="Browse", command=self._browse_input).grid(row=1, column=2, sticky="ew", pady=6)
 
-        ttk.Label(files_frame, text="Previous NvM.arxml").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
-        ttk.Entry(files_frame, textvariable=self.previous_arxml_var, state="normal" if not self.versioned_only else "disabled").grid(row=2, column=1, sticky="ew", pady=6)
-        ttk.Button(files_frame, text="Browse", command=self._browse_previous_arxml, state="normal" if not self.versioned_only else "disabled").grid(row=2, column=2, sticky="ew", pady=6)
+        ttk.Label(files_frame, text="Detected input").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Label(files_frame, textvariable=self.detected_type_var).grid(row=2, column=1, sticky="w", pady=6)
 
-        ttk.Label(files_frame, text="Output folder").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
-        ttk.Entry(files_frame, textvariable=self.output_dir_var).grid(row=3, column=1, sticky="ew", pady=6)
-        ttk.Button(files_frame, text="Browse", command=self._browse_output_dir).grid(row=3, column=2, sticky="ew", pady=6)
+        ttk.Label(files_frame, text="Previous NvM.arxml").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Entry(files_frame, textvariable=self.previous_arxml_var, state="normal" if not self.versioned_only else "disabled").grid(row=3, column=1, sticky="ew", pady=6)
+        ttk.Button(files_frame, text="Browse", command=self._browse_previous_arxml, state="normal" if not self.versioned_only else "disabled").grid(row=3, column=2, sticky="ew", pady=6)
 
-        ttk.Label(files_frame, text="AUTOSAR Version").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=6)
-        self.version_combo = ttk.Combobox(files_frame, textvariable=self.autosar_version_var, state="readonly")
-        self.version_combo.grid(row=4, column=1, sticky="ew", pady=6)
-        ttk.Label(files_frame, text="Required" if self.versioned_only else "(Optional)", style="Subtle.TLabel").grid(row=4, column=2, sticky="w", padx=4)
+        ttk.Label(files_frame, text="Output folder").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=6)
+        ttk.Entry(files_frame, textvariable=self.output_dir_var).grid(row=4, column=1, sticky="ew", pady=6)
+        ttk.Button(files_frame, text="Browse", command=self._browse_output_dir).grid(row=4, column=2, sticky="ew", pady=6)
 
         options_frame = ttk.LabelFrame(outer, text="Options", padding=12)
         options_frame.grid(row=2, column=0, sticky="ew", pady=(0, 12))
@@ -198,7 +203,7 @@ class NvMDesktopApp:
         memory_frame.columnconfigure(0, weight=1)
         ttk.Label(memory_frame, textvariable=self.memory_usage_var, justify="left", wraplength=880).grid(row=0, column=0, sticky="w")
 
-        commands_frame = ttk.LabelFrame(outer, text="README Commands", padding=12)
+        commands_frame = ttk.LabelFrame(outer, text="Workflows", padding=12)
         commands_frame.grid(row=4, column=0, sticky="ew", pady=(0, 12))
         for column in range(3):
             commands_frame.columnconfigure(column, weight=1)
@@ -216,9 +221,9 @@ class NvMDesktopApp:
         help_row = (len(operation_keys) + 2) // 3
         ttk.Button(
             commands_frame,
-            text="Show CLI Help",
+            text="Refresh Summary",
             style="Action.TButton",
-            command=self._show_help,
+            command=lambda: self._select_operation(self.current_operation_key),
         ).grid(row=help_row, column=0, sticky="ew", padx=6, pady=6)
         ttk.Button(
             commands_frame,
@@ -228,17 +233,17 @@ class NvMDesktopApp:
         ).grid(row=help_row, column=1, sticky="ew", padx=6, pady=6)
         ttk.Button(
             commands_frame,
-            text="Preview Current Command",
+            text="Show Current Workflow",
             style="Action.TButton",
             command=lambda: self._select_operation(self.current_operation_key),
         ).grid(row=help_row, column=2, sticky="ew", padx=6, pady=6)
 
-        preview_frame = ttk.LabelFrame(outer, text="Command Preview", padding=12)
+        preview_frame = ttk.LabelFrame(outer, text="Workflow Summary", padding=12)
         preview_frame.grid(row=5, column=0, sticky="nsew")
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(2, weight=1)
-        ttk.Label(preview_frame, text="Equivalent CLI command for the selected workflow:", style="Subtle.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Entry(preview_frame, textvariable=self.command_preview_var, state="readonly").grid(row=1, column=0, sticky="ew", pady=(8, 12))
+        ttk.Label(preview_frame, text="Current GUI operation and selected paths:", style="Subtle.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Entry(preview_frame, textvariable=self.workflow_summary_var, state="readonly").grid(row=1, column=0, sticky="ew", pady=(8, 12))
 
         log_frame = ttk.LabelFrame(preview_frame, text="Execution Log", padding=8)
         log_frame.grid(row=2, column=0, sticky="nsew")
@@ -259,16 +264,36 @@ class NvMDesktopApp:
         self._refresh_command_preview()
 
     def _load_versions(self) -> None:
-        versions_root = self.workspace.application_root / "versions"
-        if versions_root.exists():
-            versions = [p.name for p in versions_root.iterdir() if p.is_dir() and (p / "config.yaml").exists()]
-            self.version_combo["values"] = sorted(versions)
-            if versions:
-                sorted_versions = sorted(versions)
-                if DEFAULT_AUTOSAR_VERSION in sorted_versions:
-                    self.autosar_version_var.set(DEFAULT_AUTOSAR_VERSION)
-                else:
-                    self.autosar_version_var.set(sorted_versions[0])
+        # Try workspace application_root first (useful when running in dev with CWD workspace),
+        # but fall back to the package repository location so packaged / alternative cwd runs still find versions/.
+        candidates = [
+            self.workspace.application_root / "versions",
+            Path(__file__).resolve().parent.parent / "versions",
+        ]
+        
+        # Support for PyInstaller bundled data
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            candidates.append(Path(sys._MEIPASS) / "versions")
+
+        versions: list[str] = []
+        for versions_root in candidates:
+            if versions_root.exists():
+                versions = [
+                    canonical_version_label(p.name)
+                    for p in versions_root.iterdir()
+                    if p.is_dir() and any((p / f"config.{ext}").exists() for ext in ("yaml", "yml"))
+                ]
+                if versions:
+                    break
+
+        if not versions:
+            versions = ["Not Found", "Error", "Try Building again"]
+
+        versions = sorted(set(versions))
+        self.version_combo["values"] = versions
+
+        default_index = versions.index(DEFAULT_AUTOSAR_VERSION) if DEFAULT_AUTOSAR_VERSION in versions else 0
+        self.version_combo.current(default_index)
 
     def _browse_input(self) -> None:
         path = filedialog.askopenfilename(
@@ -302,10 +327,6 @@ class NvMDesktopApp:
         if path:
             self.output_dir_var.set(path)
             self._refresh_command_preview()
-
-    def _show_help(self) -> None:
-        self._append_log(build_argument_parser().format_help())
-        self.status_var.set("CLI help shown in log")
 
     def _show_about_dialog(self) -> None:
         dialog = tk.Toplevel(self.root)
@@ -390,7 +411,7 @@ class NvMDesktopApp:
         self._select_operation(operation_key)
         self.status_var.set(f"Running: {self.OPERATIONS[operation_key]['label']}")
         self._append_log(f"Running {self.OPERATIONS[operation_key]['label']}")
-        self._append_log(self.command_preview_var.get())
+        self._append_log(self.workflow_summary_var.get())
 
         self.worker_thread = threading.Thread(target=self._execute_request, args=(request,), daemon=True)
         self.worker_thread.start()
@@ -448,50 +469,56 @@ class NvMDesktopApp:
         self.current_operation_key = operation_key
         self._refresh_command_preview()
         if update_log:
-            self._append_log(f"Selected command: {self.OPERATIONS[operation_key]['label']}")
+            self._append_log(f"Selected workflow: {self.OPERATIONS[operation_key]['label']}")
 
     def _refresh_command_preview(self) -> None:
         try:
             request = self._build_request(self.current_operation_key)
         except ValueError:
-            preview = self._build_placeholder_preview(self.current_operation_key)
-            self.command_preview_var.set(" ".join(preview))
+            self.workflow_summary_var.set(self._build_placeholder_summary(self.current_operation_key))
             self.memory_usage_var.set("Select a valid input to estimate NvM usage.")
             return
 
-        self.command_preview_var.set(format_cli_command(request))
+        self.workflow_summary_var.set(self._build_request_summary(request))
         self._refresh_memory_usage(request)
 
-    def _build_placeholder_preview(self, operation_key: str) -> list[str]:
+    def _build_placeholder_summary(self, operation_key: str) -> str:
         operation = self.OPERATIONS[operation_key]
-        command = "generate-versioned" if self._is_versioned_request(operation_key) else "generate"
-        preview = [
-            "python",
-            "main.py",
-            command,
-            "--input-type",
-            operation["input_type"],
-            "--input-file",
-            "<select file>",
-            "--output",
-            self.output_dir_var.get().strip() or str(self.workspace.output_dir),
+        output_dir = self.output_dir_var.get().strip() or str(self.workspace.output_dir)
+        parts = [
+            f"Workflow={operation['label']}",
+            f"InputType={operation['input_type']}",
+            "Input=<select file>",
+            f"Output={output_dir}",
         ]
         if operation["needs_previous"] and not self.versioned_only:
-            preview.extend(["--previous-arxml", "<select NvM.arxml>"])
-        if operation["allow_update"] and not self.versioned_only:
-            preview.append("--allow-update")
+            parts.append("PreviousARXML=<select NvM.arxml>")
         version = self.autosar_version_var.get().strip()
-        if self._is_versioned_request(operation_key) and version:
-            preview.extend(["--autosar-version", version])
+        if version:
+            parts.append(f"Version={version}")
+        if operation["allow_update"] and not self.versioned_only:
+            parts.append("Mode=Update existing blocks")
         if self.verbose_var.get():
-            preview.append("--verbose")
-        return preview
+            parts.append("Verbose=true")
+        return " | ".join(parts)
 
-    def _is_versioned_request(self, operation_key: str) -> bool:
-        if self.versioned_only:
-            return True
-        operation = self.OPERATIONS[operation_key]
-        return bool(self.autosar_version_var.get().strip()) and not operation["needs_previous"]
+    def _build_request_summary(self, request: GenerationRequest) -> str:
+        operation = self.OPERATIONS[self.current_operation_key]
+        parts = [
+            f"Workflow={operation['label']}",
+            f"InputType={request.input_type}",
+            f"Input={request.input_file}",
+            f"Output={request.output_dir}",
+        ]
+        if request.previous_arxml is not None:
+            parts.append(f"PreviousARXML={request.previous_arxml}")
+        if request.autosar_version:
+            parts.append(f"Version={request.autosar_version}")
+        if request.allow_update:
+            parts.append("Mode=Update existing blocks")
+        if request.verbose:
+            parts.append("Verbose=true")
+        return " | ".join(parts)
 
     def _refresh_memory_usage(self, request: GenerationRequest) -> None:
         try:

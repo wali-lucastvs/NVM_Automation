@@ -2,20 +2,19 @@
 
 ## Overview
 
-This project generates AUTOSAR NvM artifacts from JSON or Excel input:
+This project generates AUTOSAR NvM artifacts from JSON or Excel input through a desktop GUI:
 
 - `NvM_Cfg.c`
 - `NvM_Cfg.h`
 - `NvM.arxml`
 
-The codebase now uses a unified entry point, a single desktop GUI for both standard and versioned workflows, and a single generator module that supports both standard and versioned generation.
+The codebase now uses a desktop GUI as the only user-facing entry point, with a single generator module that supports both standard and versioned generation.
 
 ## Project Layout
 
 ```text
 nvm_app/
   __init__.py
-  cli.py
   gui.py
 
 nvm_tool/
@@ -52,7 +51,7 @@ workspace/
   output/
 ```
 
-Generated files are written to `workspace/output` by default. Packaged desktop builds are staged under `release/dist/`.
+Generated files are written to `workspace/output` by default unless changed in the GUI. Packaged desktop builds are staged under `release/dist/`.
 
 ## Install
 
@@ -62,49 +61,19 @@ pip install -r requirements.txt
 
 ## Usage
 
-### Standard generation
+### Launch the GUI
 
 ```powershell
-python -m nvm_app.cli generate --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output
+python -m nvm_app.gui
 ```
 
-### Versioned generation
+Within the GUI you can:
 
-```powershell
-python -m nvm_app.cli generate-versioned --input-type json --input-file workspace/input/nvm_blocks.json --autosar-version Autosar_4_0_2 --output workspace/output
-```
-
-### Merge with a previous ARXML
-
-```powershell
-python -m nvm_app.cli generate --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output
-```
-
-### Update existing blocks
-
-```powershell
-python -m nvm_app.cli generate --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update
-```
-
-### Launch the main GUI
-
-```powershell
-python -m nvm_app.cli gui
-```
-
-### Launch the versioned GUI
-
-```powershell
-python -m nvm_app.cli gui-versioned
-```
-
-### Flag-based entry
-
-```powershell
-python -m nvm_app.cli --gui
-python -m nvm_app.cli --gui --versioned
-python -m nvm_app.cli --versioned --input-type json --input-file workspace/input/nvm_blocks.json --autosar-version Autosar_4_0_2
-```
+- Generate from JSON
+- Generate from Excel
+- Merge with a previous `NvM.arxml`
+- Update an existing `NvM.arxml`
+- Select an AUTOSAR version for versioned output
 
 ## Input fields
 

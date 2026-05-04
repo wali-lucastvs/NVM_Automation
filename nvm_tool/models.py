@@ -1,11 +1,9 @@
 from __future__ import annotations
-
-import argparse
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
 import re
-from typing import Any, Mapping, Optional, Sequence, Tuple
+from typing import Any, Mapping, Optional, Tuple
 from xml.etree import ElementTree as ET
 
 
@@ -529,55 +527,6 @@ def configure_logger(
     return logger
 
 
-def build_argument_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Generate AUTOSAR NvM configuration artifacts from JSON or Excel input, "
-            "optionally merging with a previous NvM.arxml file."
-        )
-    )
-    parser.add_argument(
-        "--input-type",
-        required=True,
-        choices=("json", "excel"),
-        help="Select the primary input source format.",
-    )
-    parser.add_argument(
-        "--input-file",
-        required=True,
-        type=Path,
-        help="Path to the JSON or Excel NvM block input file.",
-    )
-    parser.add_argument(
-        "--previous-arxml",
-        required=False,
-        type=Path,
-        help="Path to the previous NvM.arxml file used as the merge base.",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=default_output_dir(),
-        help="Directory where NvM_Cfg.c, NvM_Cfg.h, and NvM.arxml are written.",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose logging while parsing and generating files.",
-    )
-    parser.add_argument(
-        "--allow-update",
-        action="store_true",
-        help="Allow updating existing blocks with the same ID or name instead of rejecting them.",
-    )
-    parser.add_argument(
-        "--autosar-version",
-        required=False,
-        help="Target AUTOSAR version (e.g., Autosar_4_0_2).",
-    )
-    return parser
-
-
 def generate_artifacts(
     request: GenerationRequest,
     log_handler: Optional[logging.Handler] = None,
@@ -682,38 +631,6 @@ def summarize_memory_usage(request: GenerationRequest) -> NvMMemoryUsageSummary:
     )
 
 
-def run_cli(argv: Optional[Sequence[str]] = None) -> int:
-    argument_parser = build_argument_parser()
-    if argv is not None and len(argv) == 0:
-        argument_parser.print_help()
-        return 0
-
-    args = argument_parser.parse_args(argv)
-
-    try:
-        generate_artifacts(
-            GenerationRequest(
-                input_type=args.input_type,
-                input_file=args.input_file,
-                previous_arxml=args.previous_arxml,
-                output_dir=args.output,
-                verbose=args.verbose,
-                allow_update=args.allow_update,
-                autosar_version=args.autosar_version,
-            )
-        )
-    except (FileNotFoundError, ValueError, RuntimeError) as exc:
-        logger = configure_logger(args.verbose)
-        logger.error(str(exc))
-        return 1
-    except Exception:
-        logger = configure_logger(args.verbose)
-        logger.exception("An unexpected error occurred during generation.")
-        return 1
-
-    return 0
-
-
 def detect_input_type(input_file: str | Path) -> Optional[str]:
     suffix = Path(input_file).suffix.lower()
     if suffix == ".json":
@@ -721,40 +638,6 @@ def detect_input_type(input_file: str | Path) -> Optional[str]:
     if suffix in {".xlsx", ".xlsm"}:
         return "excel"
     return None
-
-
-def format_cli_command(request: GenerationRequest) -> str:
-    normalized_request = request.normalized()
-    command = "generate-versioned" if normalized_request.autosar_version else "generate"
-    parts = [
-        "python",
-        "-m",
-        "nvm_app.cli",
-        command,
-        "--input-type",
-        normalized_request.input_type,
-        "--input-file",
-        str(normalized_request.input_file),
-        "--output",
-        str(normalized_request.output_dir),
-    ]
-    if normalized_request.previous_arxml is not None:
-        parts.extend(["--previous-arxml", str(normalized_request.previous_arxml)])
-    if normalized_request.allow_update:
-        parts.append("--allow-update")
-    if normalized_request.autosar_version:
-        parts.extend(["--autosar-version", normalized_request.autosar_version])
-    if normalized_request.verbose:
-        parts.append("--verbose")
-    return " ".join(_quote_for_powershell(part) for part in parts)
-
-
-def _quote_for_powershell(value: str) -> str:
-    if not value:
-        return '""'
-    if any(character.isspace() for character in value):
-        return '"' + value.replace('"', '`"') + '"'
-    return value
 
 
 def _crc_bytes_for_block(block: NvMBlock) -> int:

@@ -13,6 +13,7 @@ from .models import (
     NvMBlock,
     ParsedArxmlDocument,
 )
+from .transformers import NvMBlockTransformer
 
 
 class NvMConfigParser:
@@ -146,7 +147,7 @@ class NvMConfigParser:
             raise ValueError("Previous ARXML contains an NvM block container without SHORT-NAME.")
 
         parameter_values = self._extract_parameter_values(container, short_name)
-        return NvMBlock.from_arxml_values(short_name, parameter_values)
+        return NvMBlockTransformer.from_arxml_container(short_name, parameter_values)
 
     def _extract_parameter_values(
         self,
@@ -199,7 +200,7 @@ class NvMConfigParser:
             raise ValueError(f"Record {index} is missing required fields: {', '.join(missing)}")
 
         try:
-            return NvMBlock.from_mapping(record)
+            return NvMBlockTransformer.from_input_record(record)
         except Exception as exc:  # noqa: BLE001
             raise ValueError(f"Invalid NvM block in record {index}: {exc}") from exc
 
