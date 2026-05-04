@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 from .models import (
     AUTOSAR_NAMESPACE,
     NVM_BLOCK_CONTAINER_DEFINITION_REF,
+    NVM_BLOCK_WRITE_PROT_DEFINITION_REF,
     NVM_MODULE_DEFINITION_REF,
     NvMBlock,
     ParsedArxmlDocument,
@@ -178,6 +179,22 @@ class NvMConfigParser:
                 )
 
             parameter_values[definition_ref_text] = (value_element.text or "").strip()
+
+        write_protection = next(
+            (
+                element
+                for element in container.iter()
+                if self._local_name(element.tag) == "WRITE-PROTECTION"
+            ),
+            None,
+        )
+        if (
+            write_protection is not None
+            and NVM_BLOCK_WRITE_PROT_DEFINITION_REF not in parameter_values
+        ):
+            parameter_values[NVM_BLOCK_WRITE_PROT_DEFINITION_REF] = (
+                write_protection.text or ""
+            ).strip()
 
         return parameter_values
 

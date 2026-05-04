@@ -41,6 +41,7 @@ NVM_BLOCK_CRC_TYPE_DEFINITION_REF = "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/Nv
 
 _C_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INTEGER_STRING_PATTERN = re.compile(r"^[+-]?\d+$")
+MAX_UINT16_VALUE = 65535
 
 
 def _normalize_short_name(value: str) -> str:
@@ -102,6 +103,15 @@ def _as_int(value: Any, field_name: str) -> int:
     raise ValueError(f"{field_name} must be an integer value.")
 
 
+def _as_required_text(value: Any, field_name: str) -> str:
+    if value is None:
+        raise ValueError(f"{field_name} must not be empty.")
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must not be empty.")
+    return normalized
+
+
 @dataclass(frozen=True)
 class ParameterDefinition:
     name: str
@@ -144,6 +154,7 @@ class NvMBlock:
     ALLOWED_BLOCK_MANAGEMENT_TYPES = {"NATIVE", "REDUNDANT", "DATASET"}
     ALLOWED_CRC_TYPES = {"CRC8", "CRC16", "CRC32"}
     DEFAULT_DEVICE_IDS = {"FEE": 0, "EA": 1}
+    DEVICE_BLOCK_SIZE_LIMITS = {"FEE": MAX_UINT16_VALUE, "EA": MAX_UINT16_VALUE}
     DEFAULT_NV_BLOCK_NUM = {"NATIVE": 1, "REDUNDANT": 2, "DATASET": 2}
     DEVICE_ID_TO_NAME = {0: "FEE", 1: "EA"}
     AUTOSAR_MANAGEMENT_TO_INTERNAL = {
@@ -249,8 +260,18 @@ class NvMBlock:
         if self.block_id <= 0:
             raise ValueError(f"{self.block_name}: block_id must be greater than 0.")
 
+        if self.block_id > MAX_UINT16_VALUE:
+            raise ValueError(f"{self.block_name}: block_id must be <= {MAX_UINT16_VALUE}.")
+
         if self.block_size <= 0:
             raise ValueError(f"{self.block_name}: block_size must be greater than 0.")
+
+        device_block_size_limit = self.DEVICE_BLOCK_SIZE_LIMITS[normalized_device]
+        if self.block_size > device_block_size_limit:
+            raise ValueError(
+                f"{self.block_name}: block_size must be <= {device_block_size_limit} "
+                f"bytes for device {normalized_device}."
+            )
 
         if not normalized_block_name:
             raise ValueError("block_name must not be empty.")
@@ -290,14 +311,17 @@ class NvMBlock:
         """Build an NvMBlock from parsed JSON or Excel input."""
 
         return cls(
-            block_name=str(record["block_name"]),
+            block_name=_as_required_text(record["block_name"], "block_name"),
             block_id=_as_int(record["block_id"], "block_id"),
             block_size=_as_int(record["block_size"], "block_size"),
-            ram_block_name=str(record["ram_block_name"]),
-            device=str(record["device"]),
-            block_management_type=str(record["block_management_type"]),
+            ram_block_name=_as_required_text(record["ram_block_name"], "ram_block_name"),
+            device=_as_required_text(record["device"], "device"),
+            block_management_type=_as_required_text(
+                record["block_management_type"],
+                "block_management_type",
+            ),
             use_crc=_as_bool(record["use_crc"], "use_crc"),
-            crc_type=str(record.get("crc_type", "CRC16")),
+            crc_type=_as_required_text(record.get("crc_type", "CRC16"), "crc_type"),
             write_protection=_as_bool(record["write_protection"], "write_protection"),
             device_id=(
                 _as_int(record["device_id"], "device_id")
