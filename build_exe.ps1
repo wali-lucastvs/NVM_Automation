@@ -6,7 +6,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $releaseRoot = Join-Path $projectRoot "release"
 $buildDir = Join-Path $releaseRoot "build"
-$stageDistDir = Join-Path $releaseRoot "dist"
+$stageDistDir = Join-Path $releaseRoot "tool"
 $specDir = Join-Path $releaseRoot "spec"
 
 Set-Location $projectRoot

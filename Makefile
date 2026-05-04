@@ -37,4 +37,6 @@ test:
 clean:
 	$(POWERSHELL) -NoProfile -Command "if (Test-Path 'release') { Remove-Item -Recurse -Force 'release' }"
 	$(POWERSHELL) -NoProfile -Command "if (Test-Path '__pycache__') { Remove-Item -Recurse -Force '__pycache__' }"
-	$(POWERSHELL) -NoProfile -Command "if (Test-Path 'NvMAutomationTool.spec') { Remove-Item -Recurse -Force 'NvMAutomationTool.spec' }"
+	$(POWERSHELL) -NoProfile -Command "if (Test-Path 'tests\__pycache__') { Remove-Item -Recurse -Force 'tests\__pycache__' }"
+	$(POWERSHELL) -NoProfile -Command "if (Test-Path 'tests\_tmp') { Remove-Item -Recurse -Force 'tests\_tmp' }"
+	$(POWERSHELL) -NoProfile -Command "if (Test-Path 'nvm_tool\__pycache__') { Remove-Item -Recurse -Force 'nvm_tool\__pycache__' }"
