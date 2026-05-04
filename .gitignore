@@ -5,3 +5,4 @@ build/
 release/
 tests/_tmp/
 workspace/output/
+.github
