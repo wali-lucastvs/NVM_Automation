@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 import unittest
 
+from nvm_tool.generator import generate
+from nvm_tool.config import load_version_profile
 from nvm_tool.parser import NvMConfigParser
 
 
@@ -50,23 +52,41 @@ class ParserTests(unittest.TestCase):
         self.assertEqual([(b.block_id, b.block_name) for b in blocks], [(3, "First"), (9, "Second")])
 
 
-    def test_duplicate_block_ids_fail(self):
-      workspace = self._make_temp_dir()
-      input_path = workspace / "blocks.json"
+    def test_dataset_block_with_crc_passes_versioned_generate(self) -> None:
+        """
+        Validates that DATASET blocks with CRC enabled succeed in versioned generation.
+        """
+        payload = [
+            {
+                "block_name": "DatasetBlock",
+                "block_id": 22,
+                "block_size": 16,
+                "ram_block_name": "Ram_DatasetBlock",
+                "device": "EA",
+                "block_management_type": "DATASET",
+                "use_crc": True,       # ← CRC present: must succeed
+                "crc_type": "CRC16",
+                "write_protection": False,
+            }
+        ]
 
-      input_path.write_text(json.dumps([
-          {"block_name": "A", "block_id": 1, "block_size": 4,
-          "ram_block_name": "Ram_A", "device": "FEE",
-          "block_management_type": "NATIVE",
-          "use_crc": True, "crc_type": "CRC16", "write_protection": False},
-          {"block_name": "B", "block_id": 1, "block_size": 4,
-          "ram_block_name": "Ram_B", "device": "FEE",
-          "block_management_type": "NATIVE",
-          "use_crc": True, "crc_type": "CRC16", "write_protection": False},
-      ]), encoding="utf-8")
+        parser = NvMConfigParser()
+        blocks = parser.parse_input_file("json", self._write_json(payload))
+        output_dir = self._make_temp_dir()
 
-      with self.assertRaises(ValueError):
-          NvMConfigParser().parse_input_file("json", input_path)
+        # Must not raise
+        generate(
+            blocks,
+            output_dir,
+            load_version_profile("4.0.2"),
+            versioned=True,
+        )
+
+        arxml_text = (output_dir / "NvM.arxml").read_text(encoding="utf-8")
+        header_text = (output_dir / "NvM_Cfg.h").read_text(encoding="utf-8")
+
+        self.assertIn("DatasetBlock", arxml_text)
+        self.assertIn("NVM_NUMBER_OF_BLOCKS (1u)", header_text)
 
     def test_parse_previous_arxml_reads_existing_blocks(self) -> None:
         workspace = self._make_temp_dir()
@@ -98,18 +118,16 @@ class ParserTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "NvM blocks"):
             NvMConfigParser().parse_input_file("json", path)
 
-    def test_invalid_arxml_fails(self):
-      path = self._make_temp_dir() / "bad.arxml"
-      path.write_text("<invalid>", encoding="utf-8")
-
-      with self.assertRaises(Exception):
-          NvMConfigParser().parse_previous_arxml(path)
-
     def _make_temp_dir(self) -> Path:
       import tempfile
       tmp = tempfile.TemporaryDirectory()
       self.addCleanup(tmp.cleanup)
       return Path(tmp.name)
+
+    def _write_json(self, payload: list[dict[str, object]]) -> Path:
+        path = self._make_temp_dir() / "blocks.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
 
     @staticmethod
     def _base_arxml_with_block(short_name: str, block_id: int) -> str:

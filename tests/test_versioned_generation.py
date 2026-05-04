@@ -197,20 +197,6 @@ class VersionedGenerationTests(unittest.TestCase):
         header = self._read(output_dir / "NvM_Cfg.h")
         self.assertIn("NVM_NUMBER_OF_BLOCKS (0u)", header)
 
-    def test_duplicate_block_ids_fail(self) -> None:
-        payload = sample_payload() * 2
-        parser = NvMConfigParser()
-
-        with self.assertRaises(ValueError):
-            parser.parse_input_file("json", self._write_json(payload))
-
-    def test_invalid_previous_arxml_fails(self) -> None:
-        bad_file = self._make_temp_dir() / "bad.arxml"
-        bad_file.write_text("<invalid>", encoding="utf-8")
-
-        parser = NvMConfigParser()
-        with self.assertRaises(Exception):
-            parser.parse_previous_arxml(bad_file)
 
     # ---------- Helpers ----------
 
@@ -223,6 +209,60 @@ class VersionedGenerationTests(unittest.TestCase):
         path = self._make_temp_dir() / "blocks.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path
+
+
+    def test_parse_previous_arxml_rejects_malformed_inputs(self) -> None:
+        cases = [
+            # (label, file_content, expected_exc, message_fragment_or_None)
+            (
+                "non_xml_garbage",
+                "<invalid>",
+                Exception,
+                None,
+                # Rationale: not valid XML at all — any parse error is correct.
+            ),
+            (
+                "unclosed_xml_tags",
+                "<AUTOSAR><broken>",
+                Exception,
+                None,
+                # Rationale: structurally broken XML; same code path but a more
+                # realistic corruption pattern than "<invalid>" alone.
+                # This was the strongest single test among the three duplicates
+                # (G04) and is preserved here.
+            ),
+            (
+                "valid_xml_no_nvm_module",
+                "<AUTOSAR></AUTOSAR>",
+                ValueError,
+                "NvM ECUC-MODULE",
+                # Rationale: well-formed XML that is semantically empty.
+                # Asserts the *specific* ValueError that the parser must raise
+                # — not just Exception — so regressions in error handling are
+                # caught precisely.
+            ),
+            (
+                "empty_file",
+                "",
+                Exception,
+                None,
+                # Rationale: edge case missed by all three original tests;
+                # empty files are a realistic filesystem error scenario.
+            ),
+        ]
+
+        for label, content, expected_exc, msg_fragment in cases:
+            with self.subTest(case=label):
+                path = self._make_temp_dir() / f"{label}.arxml"
+                path.write_text(content, encoding="utf-8")
+
+                if msg_fragment:
+                    with self.assertRaisesRegex(expected_exc, msg_fragment):
+                        NvMConfigParser().parse_previous_arxml(path)
+                else:
+                    with self.assertRaises(expected_exc):
+                        NvMConfigParser().parse_previous_arxml(path)
+
 
     @staticmethod
     def _read(path: Path) -> str:

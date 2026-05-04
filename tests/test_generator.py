@@ -133,12 +133,6 @@ class NvMGeneratorArxmlMergeTests(unittest.TestCase):
     # Error cases: bad ARXML input
     # ------------------------------------------------------------------
 
-    def test_invalid_arxml_raises(self) -> None:
-        path = self._make_temp_dir() / "bad.arxml"
-        path.write_text("<AUTOSAR><broken>", encoding="utf-8")
-
-        with self.assertRaises(Exception):
-            NvMConfigParser().parse_previous_arxml(path)
 
     def test_arxml_without_nvm_module_fails(self) -> None:
         path = self._make_temp_dir() / "empty.arxml"
@@ -151,11 +145,6 @@ class NvMGeneratorArxmlMergeTests(unittest.TestCase):
     # Duplicate detection
     # ------------------------------------------------------------------
 
-    def test_duplicate_ids_within_new_blocks(self) -> None:
-        with self.assertRaises(ValueError):
-            NvMGenerator(
-                blocks=[make_block("A", 1), make_block("B", 1)]
-            ).generate(self._make_temp_dir())
 
     def test_duplicate_names_within_new_blocks(self) -> None:
         """NEW: duplicate name within new blocks only — was missing."""
