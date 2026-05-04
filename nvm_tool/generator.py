@@ -142,6 +142,9 @@ class NvMGenerator:
 
         for block in blocks:
             lines.append(f"#define {block.block_id_macro} ({block.block_id}u)")
+            lines.append(f"#define NVM_BLOCK_SIZE_{block.macro_token} ({block.block_size}u)")
+            lines.append(f"#define NVM_BLOCK_DEVICE_{block.macro_token} ({block.device_enum})")
+            lines.append(f"#define NVM_BLOCK_CRC_{block.macro_token} ({block.crc_enum})")
 
         lines.extend(
             [
@@ -556,6 +559,8 @@ def generate(
     )
     versioned_arxml_generator = VersionedArxmlGenerator(version, logger=logger)
     rendered = versioned_arxml_generator.render(resolved_blocks)
+    if previous_document is not None:
+        rendered = _preserve_non_nvm_modules(rendered, previous_document, version.namespace)
     header = generator.render_header(resolved_blocks)
     source = generator.render_source(resolved_blocks)
 
@@ -572,3 +577,47 @@ def generate(
     logger.info("Written versioned ARXML to %s", arxml_file)
 
     return arxml_file
+
+
+def _preserve_non_nvm_modules(
+    rendered_arxml: str,
+    previous_document: ParsedArxmlDocument,
+    namespace: str,
+) -> str:
+    root = ET.fromstring(rendered_arxml)
+    elements = _find_first_child_by_local_name(root, "ELEMENTS")
+    if elements is None:
+        return rendered_arxml
+
+    preserved_modules = []
+    for element in previous_document.root.iter():
+        if NvMGenerator._local_name(element.tag) != "ECUC-MODULE-CONFIGURATION-VALUES":
+            continue
+        definition_ref = NvMGenerator._find_direct_child(element, "DEFINITION-REF")
+        if definition_ref is not None and (definition_ref.text or "").strip() == NVM_MODULE_DEFINITION_REF:
+            continue
+        preserved_modules.append(deepcopy(element))
+
+    for module in preserved_modules:
+        _retag_namespace(module, namespace)
+        elements.insert(0, module)
+
+    ET.register_namespace("", namespace)
+    ET.register_namespace("xsi", AUTOSAR_XSI_NAMESPACE)
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8") + "\n"
+
+
+def _find_first_child_by_local_name(root: ET.Element, local_name: str) -> ET.Element | None:
+    for element in root.iter():
+        if NvMGenerator._local_name(element.tag) == local_name:
+            return element
+    return None
+
+
+def _retag_namespace(element: ET.Element, namespace: str) -> None:
+    if isinstance(element.tag, str):
+        element.tag = f"{{{namespace}}}{NvMGenerator._local_name(element.tag)}"
+    for child in element:
+        _retag_namespace(child, namespace)
