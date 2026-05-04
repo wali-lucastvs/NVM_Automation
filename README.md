@@ -8,11 +8,16 @@ This project generates AUTOSAR NvM artifacts from JSON or Excel input:
 - `NvM_Cfg.h`
 - `NvM.arxml`
 
-The codebase now uses a unified entry point, merged model/config modules, and a single generator module that supports both standard and versioned generation.
+The codebase now uses a unified entry point, a single desktop GUI for both standard and versioned workflows, and a single generator module that supports both standard and versioned generation.
 
 ## Project Layout
 
 ```text
+nvm_app/
+  __init__.py
+  cli.py
+  gui.py
+
 nvm_tool/
   __init__.py
   config.py
@@ -36,7 +41,7 @@ versions/
 
 main.py
 build_exe.ps1
-requirements-dev.txt
+requirements.txt
 ```
 
 ## Workspace
@@ -47,7 +52,7 @@ workspace/
   output/
 ```
 
-Generated files are written to `workspace/output` by default.
+Generated files are written to `workspace/output` by default. Packaged desktop builds are staged under `release/dist/`.
 
 ## Install
 
@@ -60,45 +65,45 @@ pip install -r requirements.txt
 ### Standard generation
 
 ```powershell
-python main.py generate --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output
+python -m nvm_app.cli generate --input-type json --input-file workspace/input/nvm_blocks.json --output workspace/output
 ```
 
 ### Versioned generation
 
 ```powershell
-python main.py generate-versioned --input-type json --input-file workspace/input/nvm_blocks.json --autosar-version Autosar_4_0_2 --output workspace/output
+python -m nvm_app.cli generate-versioned --input-type json --input-file workspace/input/nvm_blocks.json --autosar-version Autosar_4_0_2 --output workspace/output
 ```
 
 ### Merge with a previous ARXML
 
 ```powershell
-python main.py generate --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output
+python -m nvm_app.cli generate --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output
 ```
 
 ### Update existing blocks
 
 ```powershell
-python main.py generate --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update
+python -m nvm_app.cli generate --input-type json --input-file workspace/input/nvm_blocks.json --previous-arxml workspace/input/NvM.arxml --output workspace/output --allow-update
 ```
 
 ### Launch the main GUI
 
 ```powershell
-python main.py gui
+python -m nvm_app.cli gui
 ```
 
 ### Launch the versioned GUI
 
 ```powershell
-python main.py gui-versioned
+python -m nvm_app.cli gui-versioned
 ```
 
 ### Flag-based entry
 
 ```powershell
-python main.py --gui
-python main.py --gui --versioned
-python main.py --versioned --input-type json --input-file workspace/input/nvm_blocks.json --autosar-version Autosar_4_0_2
+python -m nvm_app.cli --gui
+python -m nvm_app.cli --gui --versioned
+python -m nvm_app.cli --versioned --input-type json --input-file workspace/input/nvm_blocks.json --autosar-version Autosar_4_0_2
 ```
 
 ## Input fields
@@ -147,7 +152,7 @@ Available profiles are read from the directory names under `versions/`, for exam
 ## Build executable
 
 ```powershell
-pip install -r requirements-dev.txt
+pip install -r requirements.txt
 powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 ```
 

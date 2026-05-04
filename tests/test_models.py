@@ -54,7 +54,7 @@ class ModelSurfaceTests(unittest.TestCase):
             )
         )
 
-        self.assertIn("main.py", command)
+        self.assertIn("-m nvm_app.cli", command)
         self.assertIn("generate", command)
         self.assertIn("--verbose", command)
 

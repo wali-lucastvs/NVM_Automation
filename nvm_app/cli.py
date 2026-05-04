@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--versioned",
         action="store_true",
-        help="Use the versioned generator or versioned GUI flow.",
+        help="Use the versioned generator or open the version-focused GUI.",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     generate_versioned_parser.add_argument("--autosar-version", required=True)
 
     subparsers.add_parser("gui", help="Launch the main desktop GUI.")
-    subparsers.add_parser("gui-versioned", help="Launch the lightweight versioned GUI.")
+    subparsers.add_parser("gui-versioned", help="Launch the unified GUI in version-focused mode.")
     return parser
 
 
@@ -84,15 +84,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if command == "gui":
-        from nvm_gui import main as gui_main
+        from nvm_app.gui import main as gui_main
 
-        gui_main()
+        gui_main(versioned_only=False)
         return 0
 
     if command == "gui-versioned":
-        from nvm_gui_versioned import main as gui_versioned_main
+        from nvm_app.gui import main as gui_main
 
-        gui_versioned_main()
+        gui_main(versioned_only=True)
         return 0
 
     try:

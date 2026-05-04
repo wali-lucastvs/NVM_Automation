@@ -725,10 +725,12 @@ def detect_input_type(input_file: str | Path) -> Optional[str]:
 
 def format_cli_command(request: GenerationRequest) -> str:
     normalized_request = request.normalized()
+    command = "generate-versioned" if normalized_request.autosar_version else "generate"
     parts = [
         "python",
-        "main.py",
-        "generate",
+        "-m",
+        "nvm_app.cli",
+        command,
         "--input-type",
         normalized_request.input_type,
         "--input-file",
