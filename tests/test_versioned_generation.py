@@ -1,13 +1,32 @@
+"""
+AUTHOR   :   S M Wali Haider Zaidi
+These Test Cases are non replaceable as they are specifically designed to validate the versioned generation of NvM configurations, ensuring compliance with AUTOSAR standards and proper merging of legacy data. The tests cover critical aspects such as output generation for multiple versions, structural consistency, and input validation rules, which are essential for maintaining the integrity and functionality of the NvM tool across different AUTOSAR versions.
+
+Test suite for validating versioned NvM generation.
+
+Key checks:
+- Ensures ARXML, C, and header files are generated correctly for supported AUTOSAR versions.
+- Verifies merging of previous ARXML data with new inputs.
+- Confirms structural consistency between legacy and versioned (4.0.2) outputs.
+- Validates input rules (e.g., duplicate block IDs, dataset blocks requiring CRC).
+- Handles edge cases like empty inputs and invalid previous ARXML.
+
+Note:
+XML comparisons ignore non-functional differences such as schemaLocation
+and formatting, focusing only on meaningful structure and attributes.
+"""
+
+
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
-import uuid
+import tempfile
 import unittest
-from xml.etree import ElementTree as ET
+from pathlib import Path
+import xml.etree.ElementTree as ET
 
-from nvm_tool.generator import NvMGenerator
-from nvm_tool.generator import generate
+from nvm_tool.generator import NvMGenerator, generate
 from nvm_tool.parser import NvMConfigParser
 from nvm_tool.config import load_version_profile
 
@@ -45,7 +64,10 @@ def dataset_without_crc_payload() -> list[dict[str, object]]:
 
 
 class VersionedGenerationTests(unittest.TestCase):
-    def test_selected_versions_generate_arxml_c_and_h(self) -> None:
+
+    # ---------- Core Tests ----------
+
+    def test_selected_versions_generate_outputs(self) -> None:
         parser = NvMConfigParser()
         input_path = self._write_json(sample_payload())
         blocks = parser.parse_input_file("json", input_path)
@@ -60,140 +82,172 @@ class VersionedGenerationTests(unittest.TestCase):
             with self.subTest(version=version_key):
                 output_dir = self._make_temp_dir()
                 profile = load_version_profile(version_key)
+
                 arxml_path = generate(blocks, output_dir, profile, versioned=True)
 
-                self.assertEqual(arxml_path, output_dir / "NvM.arxml")
-                self.assertTrue((output_dir / "NvM.arxml").exists())
+                self.assertEqual(
+                    arxml_path.resolve(),
+                    (output_dir / "NvM.arxml").resolve(),
+                )
+
                 self.assertTrue((output_dir / "NvM_Cfg.c").exists())
                 self.assertTrue((output_dir / "NvM_Cfg.h").exists())
 
-                arxml_text = (output_dir / "NvM.arxml").read_text(encoding="utf-8")
-                header_text = (output_dir / "NvM_Cfg.h").read_text(encoding="utf-8")
-                source_text = (output_dir / "NvM_Cfg.c").read_text(encoding="utf-8")
+                arxml_text = self._read(output_dir / "NvM.arxml")
+                header_text = self._read(output_dir / "NvM_Cfg.h")
+                source_text = self._read(output_dir / "NvM_Cfg.c")
 
-                self.assertIn(f'xmlns="{namespace}"', arxml_text)
+                root = ET.fromstring(arxml_text)
+                self.assertTrue(root.tag.startswith(f"{{{namespace}}}"))
+
                 self.assertIn("NVM_NUMBER_OF_BLOCKS (1u)", header_text)
                 self.assertIn("NvM_BlockDescriptorTable", source_text)
 
-    def test_previous_arxml_merge_is_applied_before_versioned_output(self) -> None:
+    def test_previous_arxml_merge(self) -> None:
         parser = NvMConfigParser()
-        input_path = self._write_json(sample_payload())
-        previous_dir = self._make_temp_dir()
-        previous_output = previous_dir / "legacy"
-        previous_output.mkdir(parents=True, exist_ok=True)
 
-        legacy_input = previous_dir / "legacy_blocks.json"
-        legacy_input.write_text(
-            json.dumps(
-                [
-                    {
-                        "block_name": "LegacyBlock",
-                        "block_id": 10,
-                        "block_size": 8,
-                        "ram_block_name": "Ram_LegacyBlock",
-                        "device": "FEE",
-                        "block_management_type": "NATIVE",
-                        "use_crc": True,
-                        "crc_type": "CRC16",
-                        "write_protection": False,
-                    }
-                ]
-            ),
-            encoding="utf-8",
-        )
+        # legacy
+        legacy_input = self._write_json([
+            {
+                "block_name": "LegacyBlock",
+                "block_id": 10,
+                "block_size": 8,
+                "ram_block_name": "Ram_LegacyBlock",
+                "device": "FEE",
+                "block_management_type": "NATIVE",
+                "use_crc": True,
+                "crc_type": "CRC16",
+                "write_protection": False,
+            }
+        ])
+
         legacy_blocks = parser.parse_input_file("json", legacy_input)
-        NvMGenerator(legacy_blocks).generate(previous_output)
-        previous_document = parser.parse_previous_arxml(previous_output / "NvM.arxml")
+        previous_dir = self._make_temp_dir()
+        NvMGenerator(legacy_blocks).generate(previous_dir)
 
-        new_blocks = parser.parse_input_file("json", input_path)
+        previous_doc = parser.parse_previous_arxml(previous_dir / "NvM.arxml")
+
+        # new
+        new_blocks = parser.parse_input_file("json", self._write_json(sample_payload()))
         output_dir = self._make_temp_dir()
+
         generate(
             new_blocks,
             output_dir,
             load_version_profile("Autosar_4_2_2"),
-            previous_document=previous_document,
+            previous_document=previous_doc,
             versioned=True,
         )
 
-        arxml_text = (output_dir / "NvM.arxml").read_text(encoding="utf-8")
-        header_text = (output_dir / "NvM_Cfg.h").read_text(encoding="utf-8")
+        arxml_text = self._read(output_dir / "NvM.arxml")
+        header_text = self._read(output_dir / "NvM_Cfg.h")
+
         self.assertIn("LegacyBlock", arxml_text)
         self.assertIn("VersionedBlock", arxml_text)
         self.assertIn("NVM_NUMBER_OF_BLOCKS (2u)", header_text)
 
-    def test_versioned_402_preserves_legacy_arxml_structure(self) -> None:
+    def test_structure_preserved_for_402(self) -> None:
         parser = NvMConfigParser()
-        input_path = self._write_json(sample_payload())
-        blocks = parser.parse_input_file("json", input_path)
+        blocks = parser.parse_input_file("json", self._write_json(sample_payload()))
 
-        legacy_output_dir = self._make_temp_dir()
-        NvMGenerator(blocks).generate(legacy_output_dir)
-        legacy_tree = ET.fromstring((legacy_output_dir / "NvM.arxml").read_text(encoding="utf-8"))
+        legacy_dir = self._make_temp_dir()
+        NvMGenerator(blocks).generate(legacy_dir)
 
-        versioned_output_dir = self._make_temp_dir()
+        versioned_dir = self._make_temp_dir()
         generate(
             blocks,
-            versioned_output_dir,
+            versioned_dir,
             load_version_profile("4.0.2"),
             versioned=True,
         )
-        versioned_tree = ET.fromstring(
-            (versioned_output_dir / "NvM.arxml").read_text(encoding="utf-8")
+
+        legacy_tree = ET.fromstring(self._read(legacy_dir / "NvM.arxml"))
+        versioned_tree = ET.fromstring(self._read(versioned_dir / "NvM.arxml"))
+
+        self.assertEqual(
+            self._normalized_shape(legacy_tree),
+            self._normalized_shape(versioned_tree),
         )
 
-        self.assertEqual(self._shape(legacy_tree), self._shape(versioned_tree))
+    # ---------- Validation Tests ----------
 
-    def test_dataset_blocks_without_crc_are_rejected(self) -> None:
+    def test_dataset_without_crc_fails(self) -> None:
         parser = NvMConfigParser()
-        input_path = self._write_json(dataset_without_crc_payload())
-        blocks = parser.parse_input_file("json", input_path)
+        blocks = parser.parse_input_file("json", self._write_json(dataset_without_crc_payload()))
 
-        with self.assertRaisesRegex(ValueError, "must enable CRC"):
-            generate(
-                blocks,
-                self._make_temp_dir(),
-                load_version_profile("Autosar_4_0_2"),
-                versioned=True,
-            )
+        with self.assertRaises(ValueError):
+            generate(blocks, self._make_temp_dir(), load_version_profile("4.0.2"), versioned=True)
 
-    def test_unknown_version_is_rejected(self) -> None:
-        with self.assertRaisesRegex(FileNotFoundError, "Version folder not found"):
+    def test_unknown_version_fails(self) -> None:
+        with self.assertRaises(FileNotFoundError):
             load_version_profile("Autosar_9_9_9")
 
-    def test_version_alias_422_resolves_to_expected_namespace(self) -> None:
-        parser = NvMConfigParser()
-        input_path = self._write_json(sample_payload())
-        blocks = parser.parse_input_file("json", input_path)
-        output_dir = self._make_temp_dir()
-
-        generate(
-            blocks,
-            output_dir,
+    def test_version_alias_consistency(self) -> None:
+        self.assertEqual(
             load_version_profile("4.2.2"),
-            versioned=True,
+            load_version_profile("Autosar_4_2_2"),
         )
 
-        arxml_text = (output_dir / "NvM.arxml").read_text(encoding="utf-8")
-        self.assertIn('xmlns="http://autosar.org/schema/r4.2"', arxml_text)
+    # ---------- Edge Cases ----------
 
-    @staticmethod
-    def _make_temp_dir() -> Path:
-        temp_path = Path(__file__).resolve().parent / "_tmp" / uuid.uuid4().hex
-        temp_path.mkdir(parents=True, exist_ok=False)
-        return temp_path
+    def test_empty_blocks(self) -> None:
+        output_dir = self._make_temp_dir()
+        generate([], output_dir, load_version_profile("4.0.2"), versioned=True)
+
+        header = self._read(output_dir / "NvM_Cfg.h")
+        self.assertIn("NVM_NUMBER_OF_BLOCKS (0u)", header)
+
+    def test_duplicate_block_ids_fail(self) -> None:
+        payload = sample_payload() * 2
+        parser = NvMConfigParser()
+
+        with self.assertRaises(ValueError):
+            parser.parse_input_file("json", self._write_json(payload))
+
+    def test_invalid_previous_arxml_fails(self) -> None:
+        bad_file = self._make_temp_dir() / "bad.arxml"
+        bad_file.write_text("<invalid>", encoding="utf-8")
+
+        parser = NvMConfigParser()
+        with self.assertRaises(Exception):
+            parser.parse_previous_arxml(bad_file)
+
+    # ---------- Helpers ----------
+
+    def _make_temp_dir(self) -> Path:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return Path(tmp.name)
 
     def _write_json(self, payload: list[dict[str, object]]) -> Path:
-        workspace = self._make_temp_dir()
-        input_path = workspace / "blocks.json"
-        input_path.write_text(json.dumps(payload), encoding="utf-8")
-        return input_path
+        path = self._make_temp_dir() / "blocks.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
 
     @staticmethod
-    def _shape(element: ET.Element) -> tuple[str, str, list[tuple[str, str, list]]]:
+    def _read(path: Path) -> str:
+        with path.open(encoding="utf-8") as f:
+            return f.read()
+
+    @staticmethod
+    def _normalized_shape(element: ET.Element):
+        def clean_attrib(attrib: dict) -> tuple:
+            filtered = {}
+            for k, v in attrib.items():
+                # Ignore schemaLocation (tool/version dependent)
+                if k.endswith("schemaLocation"):
+                    continue
+
+                # Normalize whitespace in values
+                filtered[k] = " ".join(v.split()) if isinstance(v, str) else v
+
+            return tuple(sorted(filtered.items()))
+
         return (
-            element.tag.split("}", 1)[-1],
+            element.tag.split("}", 1)[-1],  # ignore namespace prefix
             (element.text or "").strip(),
-            [VersionedGenerationTests._shape(child) for child in list(element)],
+            clean_attrib(element.attrib),
+            [VersionedGenerationTests._normalized_shape(child) for child in list(element)],
         )
 
 

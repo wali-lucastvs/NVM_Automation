@@ -36,6 +36,7 @@ class NvMGenerator:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
     def generate(self, output_dir: Union[str, Path]) -> None:
+        self._validate_input_blocks()
         destination = Path(output_dir)
         if destination.exists() and not destination.is_dir():
             raise ValueError(f"Output path must be a directory: {destination}")
@@ -65,8 +66,21 @@ class NvMGenerator:
             )
 
     def resolve_blocks(self) -> List[NvMBlock]:
+        self._validate_input_blocks()
         merged_blocks, _ = self._resolve_generation_outputs()
         return merged_blocks
+
+    def _validate_input_blocks(self) -> None:
+        seen_ids = set()
+        seen_names = set()
+        for block in self.blocks:
+            if block.block_id in seen_ids:
+                raise ValueError(f"Duplicate block ID {block.block_id} in new input blocks")
+            seen_ids.add(block.block_id)
+
+            if block.block_name in seen_names:
+                raise ValueError(f"Duplicate block name '{block.block_name}' in new input blocks")
+            seen_names.add(block.block_name)
 
     def render_header(self, blocks: List[NvMBlock]) -> str:
         lines = [

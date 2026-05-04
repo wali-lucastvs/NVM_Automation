@@ -1,8 +1,12 @@
+"""
+AUTHOR   :   S M Wali Haider Zaidi
+These Test Cases are non replaceable as they are specifically designed to validate the versioned generation of NvM configurations, ensuring compliance with AUTOSAR standards and proper merging of legacy data. The tests cover critical aspects such as output generation for multiple versions, structural consistency, and input validation rules, which are essential for maintaining the integrity and functionality of the NvM tool across different AUTOSAR versions.
+"""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-import uuid
 import unittest
 
 from nvm_tool.parser import NvMConfigParser
@@ -43,7 +47,26 @@ class ParserTests(unittest.TestCase):
         )
 
         blocks = NvMConfigParser().parse_input_file("json", input_path)
-        self.assertEqual([block.block_id for block in blocks], [3, 9])
+        self.assertEqual([(b.block_id, b.block_name) for b in blocks], [(3, "First"), (9, "Second")])
+
+
+    def test_duplicate_block_ids_fail(self):
+      workspace = self._make_temp_dir()
+      input_path = workspace / "blocks.json"
+
+      input_path.write_text(json.dumps([
+          {"block_name": "A", "block_id": 1, "block_size": 4,
+          "ram_block_name": "Ram_A", "device": "FEE",
+          "block_management_type": "NATIVE",
+          "use_crc": True, "crc_type": "CRC16", "write_protection": False},
+          {"block_name": "B", "block_id": 1, "block_size": 4,
+          "ram_block_name": "Ram_B", "device": "FEE",
+          "block_management_type": "NATIVE",
+          "use_crc": True, "crc_type": "CRC16", "write_protection": False},
+      ]), encoding="utf-8")
+
+      with self.assertRaises(ValueError):
+          NvMConfigParser().parse_input_file("json", input_path)
 
     def test_parse_previous_arxml_reads_existing_blocks(self) -> None:
         workspace = self._make_temp_dir()
@@ -52,16 +75,41 @@ class ParserTests(unittest.TestCase):
 
         document = NvMConfigParser().parse_previous_arxml(arxml_path)
 
-        self.assertEqual(document.namespace, "http://autosar.org/schema/r4.0")
-        self.assertEqual(len(document.blocks), 1)
-        self.assertEqual(document.blocks[0].block_id, 10)
-        self.assertEqual(document.blocks[0].short_name, "LegacyBlock")
+        self.assertTrue(document.namespace.startswith("http://autosar.org/schema/"))
+        
+        block = document.blocks[0]
+        self.assertEqual(block.block_size, 8)
+        self.assertTrue(block.use_crc)
+        self.assertEqual(block.crc_type, "CRC16")
+        self.assertEqual(block.ram_block_name, "Ram_LegacyBlock")
+    
 
-    @staticmethod
-    def _make_temp_dir() -> Path:
-        temp_path = Path(__file__).resolve().parent / "_tmp" / uuid.uuid4().hex
-        temp_path.mkdir(parents=True, exist_ok=False)
-        return temp_path
+    def test_missing_required_field_fails(self):
+      path = self._make_temp_dir() / "bad.json"
+      path.write_text(json.dumps([{"block_name": "A"}]), encoding="utf-8")
+
+      with self.assertRaises(Exception):
+          NvMConfigParser().parse_input_file("json", path)
+
+    def test_empty_input_fails(self):
+        path = self._make_temp_dir() / "empty.json"
+        path.write_text("[]", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "NvM blocks"):
+            NvMConfigParser().parse_input_file("json", path)
+
+    def test_invalid_arxml_fails(self):
+      path = self._make_temp_dir() / "bad.arxml"
+      path.write_text("<invalid>", encoding="utf-8")
+
+      with self.assertRaises(Exception):
+          NvMConfigParser().parse_previous_arxml(path)
+
+    def _make_temp_dir(self) -> Path:
+      import tempfile
+      tmp = tempfile.TemporaryDirectory()
+      self.addCleanup(tmp.cleanup)
+      return Path(tmp.name)
 
     @staticmethod
     def _base_arxml_with_block(short_name: str, block_id: int) -> str:

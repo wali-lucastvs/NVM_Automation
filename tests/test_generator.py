@@ -1,30 +1,67 @@
+"""
+AUTHOR   :   S M Wali Haider Zaidi
+These Test Cases are non replaceable as they are specifically designed to validate the versioned generation of NvM configurations, ensuring compliance with AUTOSAR standards and proper merging of legacy data. The tests cover critical aspects such as output generation for multiple versions, structural consistency, and input validation rules, which are essential for maintaining the integrity and functionality of the NvM tool across different AUTOSAR versions.
+
+
+Tests for NvM ARXML merge behavior.
+
+Covers:
+- Merging previous ARXML with new NvM blocks
+- Preservation of existing containers (NvM and non-NvM)
+- Appending new block descriptors (single and multiple)
+- Detection of duplicate block IDs and names across sources
+- Write protection flag handling
+- EA and FEE device types in merge
+- CRC32 block type in merge
+- Blocks with use_crc=False
+- Re-merge safety (merging an already-merged file)
+- Block ordering after merge
+- Duplicate block names within new blocks only
+
+Focus:
+Ensures correctness of merge logic and AUTOSAR NvM constraints.
+"""
+
+
 from __future__ import annotations
 
 import unittest
 from pathlib import Path
-import uuid
 from xml.etree import ElementTree as ET
 
 from nvm_tool import NvMBlock, NvMConfigParser, NvMGenerator
 
 
-def make_block(name: str, block_id: int) -> NvMBlock:
+def make_block(
+    name: str,
+    block_id: int,
+    device: str = "FEE",
+    use_crc: bool = True,
+    crc_type: str = "CRC16",
+    write_protection: bool = False,
+    block_management_type: str = "NATIVE",
+) -> NvMBlock:
     return NvMBlock.from_mapping(
         {
             "block_name": name,
             "block_id": block_id,
             "block_size": 16,
             "ram_block_name": f"Ram_{name}",
-            "device": "FEE",
-            "block_management_type": "NATIVE",
-            "use_crc": True,
-            "crc_type": "CRC16",
-            "write_protection": False,
+            "device": device,
+            "block_management_type": block_management_type,
+            "use_crc": use_crc,
+            "crc_type": crc_type,
+            "write_protection": write_protection,
         }
     )
 
 
 class NvMGeneratorArxmlMergeTests(unittest.TestCase):
+
+    # ------------------------------------------------------------------
+    # Happy path: core merge
+    # ------------------------------------------------------------------
+
     def test_previous_arxml_containers_are_preserved_and_new_blocks_are_appended(self) -> None:
         workspace = self._make_temp_dir()
         previous_arxml_path = workspace / "NvM.arxml"
@@ -38,16 +75,101 @@ class NvMGeneratorArxmlMergeTests(unittest.TestCase):
 
         merged_content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
         short_names, block_ids = self._extract_container_metadata(merged_content)
-        self.assertEqual(short_names, ["LegacyBlock", "NewBlock"])
-        self.assertEqual(block_ids, [10, 5])
+        self.assertCountEqual(short_names, ["LegacyBlock", "NewBlock"])
+        self.assertCountEqual(block_ids, [10, 5])
+        self.assertIn("Ram_NewBlock", merged_content)
+        self.assertIn("NVM_CRC16", merged_content)
 
-    def test_duplicate_block_id_between_previous_arxml_and_new_input_is_rejected(self) -> None:
+    def test_multiple_new_blocks_appended(self) -> None:
+        """FIX: was using weak assertIn — now uses _extract_container_metadata for proper validation."""
+        workspace = self._make_temp_dir()
+        previous_path = workspace / "NvM.arxml"
+        previous_path.write_text(self._base_arxml_with_block("Legacy", 1), encoding="utf-8")
+
+        parser = NvMConfigParser()
+        previous_doc = parser.parse_previous_arxml(previous_path)
+
+        generator = NvMGenerator(
+            blocks=[make_block("BlockA", 2), make_block("BlockB", 3)],
+            previous_document=previous_doc,
+        )
+        generator.generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        short_names, block_ids = self._extract_container_metadata(content)
+
+        self.assertCountEqual(short_names, ["Legacy", "BlockA", "BlockB"])
+        self.assertCountEqual(block_ids, [1, 2, 3])
+        self.assertIn("Ram_BlockA", content)
+        self.assertIn("Ram_BlockB", content)
+
+    # ------------------------------------------------------------------
+    # Empty / minimal ARXML
+    # ------------------------------------------------------------------
+
+    def test_empty_previous_arxml_valid_nvm(self) -> None:
+        path = self._make_temp_dir() / "NvM.arxml"
+        path.write_text("""<?xml version="1.0" encoding="utf-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>NvM</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/AUTOSAR/EcucDefs/NvM</DEFINITION-REF>
+          <CONTAINERS/>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
+""", encoding="utf-8")
+
+        parser = NvMConfigParser()
+        prev = parser.parse_previous_arxml(path)
+        self.assertEqual(prev.blocks, [])
+
+    # ------------------------------------------------------------------
+    # Error cases: bad ARXML input
+    # ------------------------------------------------------------------
+
+    def test_invalid_arxml_raises(self) -> None:
+        path = self._make_temp_dir() / "bad.arxml"
+        path.write_text("<AUTOSAR><broken>", encoding="utf-8")
+
+        with self.assertRaises(Exception):
+            NvMConfigParser().parse_previous_arxml(path)
+
+    def test_arxml_without_nvm_module_fails(self) -> None:
+        path = self._make_temp_dir() / "empty.arxml"
+        path.write_text("<AUTOSAR></AUTOSAR>", encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "NvM ECUC-MODULE"):
+            NvMConfigParser().parse_previous_arxml(path)
+
+    # ------------------------------------------------------------------
+    # Duplicate detection
+    # ------------------------------------------------------------------
+
+    def test_duplicate_ids_within_new_blocks(self) -> None:
+        with self.assertRaises(ValueError):
+            NvMGenerator(
+                blocks=[make_block("A", 1), make_block("B", 1)]
+            ).generate(self._make_temp_dir())
+
+    def test_duplicate_names_within_new_blocks(self) -> None:
+        """NEW: duplicate name within new blocks only — was missing."""
+        with self.assertRaises(ValueError):
+            NvMGenerator(
+                blocks=[make_block("SameName", 1), make_block("SameName", 2)]
+            ).generate(self._make_temp_dir())
+
+    def test_duplicate_block_id_between_previous_and_new_is_rejected(self) -> None:
         workspace = self._make_temp_dir()
         previous_arxml_path = workspace / "NvM.arxml"
         previous_arxml_path.write_text(self._base_arxml_with_block("LegacyBlock", 10), encoding="utf-8")
 
-        parser = NvMConfigParser()
-        previous_document = parser.parse_previous_arxml(previous_arxml_path)
+        previous_document = NvMConfigParser().parse_previous_arxml(previous_arxml_path)
 
         with self.assertRaisesRegex(ValueError, "Duplicate block ID 10"):
             NvMGenerator(
@@ -55,13 +177,12 @@ class NvMGeneratorArxmlMergeTests(unittest.TestCase):
                 previous_document=previous_document,
             ).generate(workspace)
 
-    def test_duplicate_block_name_between_previous_arxml_and_new_input_is_rejected(self) -> None:
+    def test_duplicate_block_name_between_previous_and_new_is_rejected(self) -> None:
         workspace = self._make_temp_dir()
         previous_arxml_path = workspace / "NvM.arxml"
         previous_arxml_path.write_text(self._base_arxml_with_block("LegacyBlock", 10), encoding="utf-8")
 
-        parser = NvMConfigParser()
-        previous_document = parser.parse_previous_arxml(previous_arxml_path)
+        previous_document = NvMConfigParser().parse_previous_arxml(previous_arxml_path)
 
         with self.assertRaisesRegex(ValueError, "Duplicate block name 'LegacyBlock'"):
             NvMGenerator(
@@ -69,11 +190,173 @@ class NvMGeneratorArxmlMergeTests(unittest.TestCase):
                 previous_document=previous_document,
             ).generate(workspace)
 
-    @staticmethod
-    def _make_temp_dir() -> Path:
-        temp_path = Path(__file__).resolve().parent / "_tmp" / uuid.uuid4().hex
-        temp_path.mkdir(parents=True, exist_ok=False)
-        return temp_path
+    # ------------------------------------------------------------------
+    # Non-NvM container preservation
+    # ------------------------------------------------------------------
+
+    def test_non_nvm_containers_are_preserved(self) -> None:
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text("""<?xml version="1.0" encoding="utf-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <ELEMENTS>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>Com</SHORT-NAME>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+        <ECUC-MODULE-CONFIGURATION-VALUES>
+          <SHORT-NAME>NvM</SHORT-NAME>
+          <DEFINITION-REF DEST="ECUC-MODULE-DEF">/AUTOSAR/EcucDefs/NvM</DEFINITION-REF>
+          <CONTAINERS/>
+        </ECUC-MODULE-CONFIGURATION-VALUES>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
+""", encoding="utf-8")
+
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator([make_block("A", 1)], previous_document=prev).generate(workspace)
+
+        result = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        self.assertIn("Com", result)
+        self.assertIn("NvM", result)
+        self.assertIn("Ram_A", result)
+
+    # ------------------------------------------------------------------
+    # NEW: Block ordering
+    # ------------------------------------------------------------------
+
+    def test_legacy_blocks_appear_before_new_blocks_in_output(self) -> None:
+        """NEW: legacy blocks must come before newly appended blocks."""
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text(self._base_arxml_with_block("Legacy", 10), encoding="utf-8")
+
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator([make_block("NewBlock", 5)], previous_document=prev).generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        legacy_pos = content.index("Legacy")
+        new_pos = content.index("NewBlock")
+        self.assertLess(legacy_pos, new_pos, "Legacy block should appear before new block in output")
+
+    # ------------------------------------------------------------------
+    # NEW: Write protection flag
+    # ------------------------------------------------------------------
+
+    def test_write_protected_block_is_merged_correctly(self) -> None:
+        """NEW: write_protection=True was never tested in merge path."""
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text(self._base_arxml_with_block("Legacy", 1), encoding="utf-8")
+
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator(
+            [make_block("ProtectedBlock", 2, write_protection=True)],
+            previous_document=prev,
+        ).generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        short_names, block_ids = self._extract_container_metadata(content)
+        self.assertIn("ProtectedBlock", short_names)
+        self.assertIn(2, block_ids)
+
+    # ------------------------------------------------------------------
+    # NEW: EA device type
+    # ------------------------------------------------------------------
+
+    def test_ea_device_block_is_merged_correctly(self) -> None:
+        """NEW: all previous tests used FEE — EA device path was untested."""
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text(self._base_arxml_with_block("FeeBlock", 1), encoding="utf-8")
+
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator(
+            [make_block("EaBlock", 2, device="EA")],
+            previous_document=prev,
+        ).generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        short_names, _ = self._extract_container_metadata(content)
+        self.assertIn("EaBlock", short_names)
+
+    # ------------------------------------------------------------------
+    # NEW: CRC32 block type
+    # ------------------------------------------------------------------
+
+    def test_crc32_block_is_merged_correctly(self) -> None:
+        """NEW: only CRC16 was tested before — CRC32 path was missing."""
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text(self._base_arxml_with_block("Legacy", 1), encoding="utf-8")
+
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator(
+            [make_block("Crc32Block", 2, crc_type="CRC32")],
+            previous_document=prev,
+        ).generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        self.assertIn("NVM_CRC32", content)
+
+    # ------------------------------------------------------------------
+    # NEW: use_crc=False
+    # ------------------------------------------------------------------
+
+    def test_block_without_crc_is_merged_correctly(self) -> None:
+        """NEW: use_crc=False path was never tested — could break XML structure."""
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text(self._base_arxml_with_block("Legacy", 1), encoding="utf-8")
+
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator(
+            [make_block("NoCrcBlock", 2, use_crc=False)],
+            previous_document=prev,
+        ).generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        short_names, _ = self._extract_container_metadata(content)
+        self.assertIn("NoCrcBlock", short_names)
+
+    # ------------------------------------------------------------------
+    # NEW: Re-merge safety
+    # ------------------------------------------------------------------
+
+    def test_remerge_does_not_duplicate_blocks(self) -> None:
+        """NEW: merging an already-merged file must not produce duplicate blocks."""
+        workspace = self._make_temp_dir()
+        path = workspace / "NvM.arxml"
+        path.write_text(self._base_arxml_with_block("Legacy", 1), encoding="utf-8")
+
+        # First merge
+        prev = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator([make_block("BlockA", 2)], previous_document=prev).generate(workspace)
+
+        # Second merge using the already-merged output as input
+        prev2 = NvMConfigParser().parse_previous_arxml(path)
+        NvMGenerator([make_block("BlockB", 3)], previous_document=prev2).generate(workspace)
+
+        content = (workspace / "NvM.arxml").read_text(encoding="utf-8")
+        short_names, block_ids = self._extract_container_metadata(content)
+
+        # No duplicates
+        self.assertEqual(len(short_names), len(set(short_names)), "Duplicate block names found after re-merge")
+        self.assertEqual(len(block_ids), len(set(block_ids)), "Duplicate block IDs found after re-merge")
+        self.assertCountEqual(short_names, ["Legacy", "BlockA", "BlockB"])
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _make_temp_dir(self) -> Path:
+        import tempfile
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        return Path(tmp.name)
 
     @staticmethod
     def _base_arxml_with_block(short_name: str, block_id: int) -> str:
