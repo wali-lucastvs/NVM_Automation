@@ -272,8 +272,8 @@ class NvMDesktopApp:
         ]
         
         # Support for PyInstaller bundled data
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            candidates.append(Path(sys._MEIPASS) / "versions")
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):  # type: ignore[attr-defined]
+            candidates.append(Path(sys._MEIPASS) / "versions")  # type: ignore[attr-defined]
 
         versions: list[str] = []
         for versions_root in candidates:
