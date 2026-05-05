@@ -61,15 +61,8 @@ jobs:
       - name: Clean workspace
         run: make clean
 
-      # ── 8. Zip the pver ────────────────────────────────────────────
-      - name: Zip the pver
-        run: |
-          Compress-Archive -Path "${{ env.RELEASE_DIR }}*" `
-                           -DestinationPath "nvm-tool-release-${{ github.run_number }}.zip" `
-                           -Force
-
-      # ── 9. Upload zipped release ─────────────────────────────────────────────
-      - name: Upload zipped release artifact
+      # ── 8. Upload zipped PVER ─────────────────────────────────────────────
+      - name: Upload zipped PVER
         uses: actions/upload-artifact@v4
         with:
           name: PVER-${{ github.run_number }}
