@@ -2,10 +2,18 @@ name: CI — Build & Test
 
 on:
   push:
-    branches: ["Build_Artifacts", "main"]
+    branches: ["Build_Artifacts"]
   pull_request:
-    branches: ["Build_Artifacts", "main"]
+    branches: ["Build_Artifacts"]
   workflow_dispatch:          # allows manual trigger from GitHub UI
+
+# ── Configure your paths here ────────────────────────────────────────────────
+# RELEASE_DIR  : folder your build_exe.ps1 writes ALL output into
+# EXE_PATH     : exact path to the .exe inside that folder
+# Change these two lines and nothing else needs to touch paths.
+env:
+  RELEASE_DIR: .
+  EXE_PATH:    release/tool/NvMAutomationTool.exe
 
 jobs:
   build-and-test:
@@ -42,11 +50,20 @@ jobs:
           Set-ExecutionPolicy Bypass -Scope Process -Force
           .\build_exe.ps1
 
-      # ── 6. Upload artifact ───────────────────────────────────────────────────
-      - name: Upload release artifact
+      # ── 6. Upload full release folder ────────────────────────────────────────
+      - name: Upload full release artifact
         uses: actions/upload-artifact@v4
         with:
           name: nvm-tool-release-${{ github.run_number }}
-          path: release/                # adjust if build_exe.ps1 outputs elsewhere
+          path: ${{ env.RELEASE_DIR }}
           retention-days: 30
           if-no-files-found: error      # fail loudly if build produced nothing
+
+      # ── 7. Upload EXE only ───────────────────────────────────────────────────
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvm-tool-exe-${{ github.run_number }}
+          path: ${{ env.EXE_PATH }}
+          retention-days: 30
+          if-no-files-found: error
