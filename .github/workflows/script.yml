@@ -50,20 +50,31 @@ jobs:
           Set-ExecutionPolicy Bypass -Scope Process -Force
           .\build_exe.ps1
 
-      # ── 6. Upload full release folder ────────────────────────────────────────
-      - name: Upload full release artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nvm-tool-release-${{ github.run_number }}
-          path: ${{ env.RELEASE_DIR }}
-          retention-days: 30
-          if-no-files-found: error      # fail loudly if build produced nothing
-
-      # ── 7. Upload EXE only ───────────────────────────────────────────────────
+      # ── 6. Upload bare EXE ───────────────────────────────────────────────────
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
           name: nvm-tool-exe-${{ github.run_number }}
           path: ${{ env.EXE_PATH }}
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 7. Clean workspace ───────────────────────────────────────────────────
+      - name: Clean workspace
+        run: make clean
+
+      # ── 8. Zip the release folder ────────────────────────────────────────────
+      - name: Zip release folder
+        run: |
+          Compress-Archive -Path "${{ env.RELEASE_DIR }}*" `
+                           -DestinationPath "nvm-tool-release-${{ github.run_number }}.zip" `
+                           -Force
+
+      # ── 9. Upload zipped release ─────────────────────────────────────────────
+      - name: Upload zipped release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvm-tool-release-${{ github.run_number }}
+          path: nvm-tool-release-${{ github.run_number }}.zip
           retention-days: 30
           if-no-files-found: error

@@ -9,6 +9,7 @@ PREVIOUS_ARXML ?= workspace/input/NvM.arxml
 AUTOSAR_VERSION ?= Autosar_4_0_2
 
 .PHONY: help install install-dev gui build build-exe test clean
+all: clean test build
 
 help:
 	@echo Available targets:
