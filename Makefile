@@ -23,9 +23,6 @@ help:
 install:
 	$(PIP) install -r requirements.txt
 
-install-dev:
-	$(PIP) install -r requirements.txt
-
 gui:
 	$(PYTHON) -m nvm_app.gui
 

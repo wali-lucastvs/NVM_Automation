@@ -38,17 +38,15 @@ jobs:
 
       # ── 3. Dependencies ──────────────────────────────────────────────────────
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: make install
 
       # ── 4. Test ──────────────────────────────────────────────────────────────
       - name: Run unit tests
-        run: python -m unittest discover -s tests -p "test_*.py"
+        run: make test
 
       # ── 5. Build executable ──────────────────────────────────────────────────
       - name: Build executable
-        run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-          .\build_exe.ps1
+        run: make build
 
       # ── 6. Upload bare EXE ───────────────────────────────────────────────────
       - name: Upload EXE artifact
@@ -63,8 +61,8 @@ jobs:
       - name: Clean workspace
         run: make clean
 
-      # ── 8. Zip the release folder ────────────────────────────────────────────
-      - name: Zip release folder
+      # ── 8. Zip the pver ────────────────────────────────────────────
+      - name: Zip the pver
         run: |
           Compress-Archive -Path "${{ env.RELEASE_DIR }}*" `
                            -DestinationPath "nvm-tool-release-${{ github.run_number }}.zip" `
@@ -74,7 +72,7 @@ jobs:
       - name: Upload zipped release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nvm-tool-release-${{ github.run_number }}
-          path: nvm-tool-release-${{ github.run_number }}.zip
+          name: PVER-${{ github.run_number }}
+          path: ${{ env.RELEASE_DIR }}
           retention-days: 30
           if-no-files-found: error
