@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal placeholder XSD for AUTOSAR 4-1-2 used for local validation. -->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:include schemaLocation="../common/AUTOSAR-base.xsd"/>
+</xs:schema>

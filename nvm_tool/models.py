@@ -1,6 +1,7 @@
 from __future__ import annotations
-
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+import logging
+from pathlib import Path
 import re
 from typing import Any, Mapping, Optional, Tuple
 from xml.etree import ElementTree as ET
@@ -40,6 +41,7 @@ NVM_BLOCK_CRC_TYPE_DEFINITION_REF = "/AUTOSAR/EcucDefs/NvM/NvMBlockDescriptor/Nv
 
 _C_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _INTEGER_STRING_PATTERN = re.compile(r"^[+-]?\d+$")
+MAX_UINT16_VALUE = 65535
 
 
 def _normalize_short_name(value: str) -> str:
@@ -101,6 +103,15 @@ def _as_int(value: Any, field_name: str) -> int:
     raise ValueError(f"{field_name} must be an integer value.")
 
 
+def _as_required_text(value: Any, field_name: str) -> str:
+    if value is None:
+        raise ValueError(f"{field_name} must not be empty.")
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must not be empty.")
+    return normalized
+
+
 @dataclass(frozen=True)
 class ParameterDefinition:
     name: str
@@ -143,6 +154,7 @@ class NvMBlock:
     ALLOWED_BLOCK_MANAGEMENT_TYPES = {"NATIVE", "REDUNDANT", "DATASET"}
     ALLOWED_CRC_TYPES = {"CRC8", "CRC16", "CRC32"}
     DEFAULT_DEVICE_IDS = {"FEE": 0, "EA": 1}
+    DEVICE_BLOCK_SIZE_LIMITS = {"FEE": MAX_UINT16_VALUE, "EA": MAX_UINT16_VALUE}
     DEFAULT_NV_BLOCK_NUM = {"NATIVE": 1, "REDUNDANT": 2, "DATASET": 2}
     DEVICE_ID_TO_NAME = {0: "FEE", 1: "EA"}
     AUTOSAR_MANAGEMENT_TO_INTERNAL = {
@@ -248,8 +260,18 @@ class NvMBlock:
         if self.block_id <= 0:
             raise ValueError(f"{self.block_name}: block_id must be greater than 0.")
 
+        if self.block_id > MAX_UINT16_VALUE:
+            raise ValueError(f"{self.block_name}: block_id must be <= {MAX_UINT16_VALUE}.")
+
         if self.block_size <= 0:
             raise ValueError(f"{self.block_name}: block_size must be greater than 0.")
+
+        device_block_size_limit = self.DEVICE_BLOCK_SIZE_LIMITS[normalized_device]
+        if self.block_size > device_block_size_limit:
+            raise ValueError(
+                f"{self.block_name}: block_size must be <= {device_block_size_limit} "
+                f"bytes for device {normalized_device}."
+            )
 
         if not normalized_block_name:
             raise ValueError("block_name must not be empty.")
@@ -289,14 +311,17 @@ class NvMBlock:
         """Build an NvMBlock from parsed JSON or Excel input."""
 
         return cls(
-            block_name=str(record["block_name"]),
+            block_name=_as_required_text(record["block_name"], "block_name"),
             block_id=_as_int(record["block_id"], "block_id"),
             block_size=_as_int(record["block_size"], "block_size"),
-            ram_block_name=str(record["ram_block_name"]),
-            device=str(record["device"]),
-            block_management_type=str(record["block_management_type"]),
+            ram_block_name=_as_required_text(record["ram_block_name"], "ram_block_name"),
+            device=_as_required_text(record["device"], "device"),
+            block_management_type=_as_required_text(
+                record["block_management_type"],
+                "block_management_type",
+            ),
             use_crc=_as_bool(record["use_crc"], "use_crc"),
-            crc_type=str(record.get("crc_type", "CRC16")),
+            crc_type=_as_required_text(record.get("crc_type", "CRC16"), "crc_type"),
             write_protection=_as_bool(record["write_protection"], "write_protection"),
             device_id=(
                 _as_int(record["device_id"], "device_id")
@@ -470,3 +495,210 @@ class NvMBlock:
         if self.use_crc:
             values[NVM_BLOCK_CRC_TYPE_DEFINITION_REF] = self.autosar_crc_enum
         return values
+
+
+@dataclass(frozen=True)
+class GenerationRequest:
+    input_type: str
+    input_file: Path
+    output_dir: Path = field(default_factory=lambda: default_output_dir())
+    previous_arxml: Optional[Path] = None
+    verbose: bool = False
+    allow_update: bool = False
+    autosar_version: Optional[str] = None
+
+    def normalized(self) -> "GenerationRequest":
+        normalized_input_type = self.input_type.strip().lower()
+        if normalized_input_type not in {"json", "excel"}:
+            raise ValueError("Unsupported input type. Use 'json' or 'excel'.")
+        if self.allow_update and self.previous_arxml is None:
+            raise ValueError("--allow-update requires --previous-arxml.")
+
+        return GenerationRequest(
+            input_type=normalized_input_type,
+            input_file=Path(self.input_file),
+            output_dir=Path(self.output_dir),
+            previous_arxml=Path(self.previous_arxml) if self.previous_arxml is not None else None,
+            verbose=self.verbose,
+            allow_update=self.allow_update,
+            autosar_version=self.autosar_version,
+        )
+
+
+@dataclass(frozen=True)
+class NvMMemoryUsageSummary:
+    block_count: int
+    total_payload_bytes: int
+    total_estimated_storage_bytes: int
+    total_crc_bytes: int
+    fee_estimated_storage_bytes: int
+    ea_estimated_storage_bytes: int
+
+
+def configure_logger(
+    verbose: bool,
+    handler: Optional[logging.Handler] = None,
+) -> logging.Logger:
+    logger = logging.getLogger("nvm_generator")
+    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.handlers.clear()
+    logger.propagate = False
+
+    effective_handler = handler or logging.StreamHandler()
+    effective_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
+    effective_handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    logger.addHandler(effective_handler)
+    return logger
+
+
+def generate_artifacts(
+    request: GenerationRequest,
+    log_handler: Optional[logging.Handler] = None,
+) -> list[Path]:
+    from .generator import NvMGenerator, generate
+    from .parser import NvMConfigParser
+
+    normalized_request = request.normalized()
+    logger = configure_logger(normalized_request.verbose, handler=log_handler)
+
+    parser = NvMConfigParser(logger=logger)
+    input_blocks = parser.parse_input_file(
+        normalized_request.input_type,
+        normalized_request.input_file,
+    )
+
+    previous_document = None
+    if normalized_request.previous_arxml:
+        previous_document = parser.parse_previous_arxml(normalized_request.previous_arxml)
+
+    if normalized_request.autosar_version:
+        from .config import load_version_profile
+
+        profile = load_version_profile(normalized_request.autosar_version)
+        generate(
+            blocks=input_blocks,
+            output=normalized_request.output_dir,
+            version=profile,
+            previous_document=previous_document,
+            allow_update=normalized_request.allow_update,
+            logger=logger,
+            versioned=True,
+        )
+    else:
+        generator = NvMGenerator(
+            blocks=input_blocks,
+            previous_document=previous_document,
+            allow_update=normalized_request.allow_update,
+            logger=logger,
+        )
+        generator.generate(normalized_request.output_dir)
+
+    return [
+        normalized_request.output_dir / "NvM_Cfg.c",
+        normalized_request.output_dir / "NvM_Cfg.h",
+        normalized_request.output_dir / "NvM.arxml",
+    ]
+
+
+def summarize_memory_usage(request: GenerationRequest) -> NvMMemoryUsageSummary:
+    from .generator import NvMGenerator
+    from .parser import NvMConfigParser
+
+    normalized_request = request.normalized()
+    logger = logging.getLogger("nvm_generator.summary")
+    parser = NvMConfigParser(logger=logger)
+    input_blocks = parser.parse_input_file(
+        normalized_request.input_type,
+        normalized_request.input_file,
+    )
+
+    previous_document = None
+    if normalized_request.previous_arxml:
+        previous_document = parser.parse_previous_arxml(normalized_request.previous_arxml)
+
+    generator = NvMGenerator(
+        blocks=input_blocks,
+        previous_document=previous_document,
+        allow_update=normalized_request.allow_update,
+        logger=logger,
+    )
+    effective_blocks = generator.resolve_blocks()
+
+    total_payload_bytes = 0
+    total_estimated_storage_bytes = 0
+    total_crc_bytes = 0
+    fee_estimated_storage_bytes = 0
+    ea_estimated_storage_bytes = 0
+
+    for block in effective_blocks:
+        block_copies = block.effective_nv_block_num
+        payload_bytes = block.block_size
+        crc_bytes = _crc_bytes_for_block(block)
+        estimated_storage_bytes = (payload_bytes + crc_bytes) * block_copies
+
+        total_payload_bytes += payload_bytes
+        total_crc_bytes += crc_bytes * block_copies
+        total_estimated_storage_bytes += estimated_storage_bytes
+
+        if block.device == "FEE":
+            fee_estimated_storage_bytes += estimated_storage_bytes
+        elif block.device == "EA":
+            ea_estimated_storage_bytes += estimated_storage_bytes
+
+    return NvMMemoryUsageSummary(
+        block_count=len(effective_blocks),
+        total_payload_bytes=total_payload_bytes,
+        total_estimated_storage_bytes=total_estimated_storage_bytes,
+        total_crc_bytes=total_crc_bytes,
+        fee_estimated_storage_bytes=fee_estimated_storage_bytes,
+        ea_estimated_storage_bytes=ea_estimated_storage_bytes,
+    )
+
+
+def detect_input_type(input_file: str | Path) -> Optional[str]:
+    suffix = Path(input_file).suffix.lower()
+    if suffix == ".json":
+        return "json"
+    if suffix in {".xlsx", ".xlsm"}:
+        return "excel"
+    return None
+
+
+def _crc_bytes_for_block(block: NvMBlock) -> int:
+    if not block.use_crc:
+        return 0
+    return {
+        "CRC8": 1,
+        "CRC16": 2,
+        "CRC32": 4,
+    }[block.crc_type]
+
+
+def get_application_root() -> Path:
+    from .config import get_application_root as _get_application_root
+
+    return _get_application_root()
+
+
+def get_workspace_layout(base_dir: str | Path | None = None):
+    from .config import get_workspace_layout as _get_workspace_layout
+
+    return _get_workspace_layout(base_dir)
+
+
+def ensure_workspace(base_dir: str | Path | None = None):
+    from .config import ensure_workspace as _ensure_workspace
+
+    return _ensure_workspace(base_dir)
+
+
+def default_input_dir() -> Path:
+    from .config import default_input_dir as _default_input_dir
+
+    return _default_input_dir()
+
+
+def default_output_dir() -> Path:
+    from .config import default_output_dir as _default_output_dir
+
+    return _default_output_dir()

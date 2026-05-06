@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple, Union
 from xml.etree import ElementTree as ET
 
+from .adapters import get_version_adapter
+from .config import VersionProfile
 from .models import (
     AUTOSAR_XSI_NAMESPACE,
     NVM_BLOCK_CONTAINER_DEFINITION_REF,
@@ -14,6 +16,8 @@ from .models import (
     NvMBlock,
     ParsedArxmlDocument,
 )
+from .rules import validate_blocks
+from .validation import ArxmlValidator
 
 
 class NvMGenerator:
@@ -32,6 +36,7 @@ class NvMGenerator:
         self.logger = logger or logging.getLogger(self.__class__.__name__)
 
     def generate(self, output_dir: Union[str, Path]) -> None:
+        self._validate_input_blocks()
         destination = Path(output_dir)
         if destination.exists() and not destination.is_dir():
             raise ValueError(f"Output path must be a directory: {destination}")
@@ -61,8 +66,21 @@ class NvMGenerator:
             )
 
     def resolve_blocks(self) -> List[NvMBlock]:
+        self._validate_input_blocks()
         merged_blocks, _ = self._resolve_generation_outputs()
         return merged_blocks
+
+    def _validate_input_blocks(self) -> None:
+        seen_ids = set()
+        seen_names = set()
+        for block in self.blocks:
+            if block.block_id in seen_ids:
+                raise ValueError(f"Duplicate block ID {block.block_id} in new input blocks")
+            seen_ids.add(block.block_id)
+
+            if block.block_name in seen_names:
+                raise ValueError(f"Duplicate block name '{block.block_name}' in new input blocks")
+            seen_names.add(block.block_name)
 
     def render_header(self, blocks: List[NvMBlock]) -> str:
         lines = [
@@ -124,6 +142,9 @@ class NvMGenerator:
 
         for block in blocks:
             lines.append(f"#define {block.block_id_macro} ({block.block_id}u)")
+            lines.append(f"#define NVM_BLOCK_SIZE_{block.macro_token} ({block.block_size}u)")
+            lines.append(f"#define NVM_BLOCK_DEVICE_{block.macro_token} ({block.device_enum})")
+            lines.append(f"#define NVM_BLOCK_CRC_{block.macro_token} ({block.crc_enum})")
 
         lines.extend(
             [
@@ -459,3 +480,144 @@ class NvMGenerator:
     @staticmethod
     def _tag(local_name: str, namespace: str) -> str:
         return f"{{{namespace}}}{local_name}"
+
+
+class VersionedArxmlGenerator:
+    """Generate version-specific ARXML from the internal NvM model."""
+
+    def __init__(
+        self,
+        profile: VersionProfile,
+        logger: logging.Logger | None = None,
+        validator: ArxmlValidator | None = None,
+    ) -> None:
+        self.profile = profile
+        self.logger = logger or logging.getLogger(self.__class__.__name__)
+        self.validator = validator or ArxmlValidator()
+        self.adapter = get_version_adapter(profile)
+
+    def render(self, blocks: Iterable[NvMBlock]) -> str:
+        resolved_blocks = list(blocks)
+        validate_blocks(resolved_blocks, version=self.profile)
+        tree = self.adapter.build_document(resolved_blocks)
+        ET.register_namespace("", self.profile.namespace)
+        ET.register_namespace("xsi", AUTOSAR_XSI_NAMESPACE)
+        ET.indent(tree, space="  ")
+        rendered = ET.tostring(
+            tree.getroot(),
+            encoding="utf-8",
+            xml_declaration=True,
+        ).decode("utf-8") + "\n"
+        self.validator.validate(rendered, self.profile)
+        return rendered
+
+
+def generate(
+    blocks: Iterable[NvMBlock],
+    output: Path,
+    version: VersionProfile | None = None,
+    previous_document: Optional[ParsedArxmlDocument] = None,
+    allow_update: bool = False,
+    logger: logging.Logger | None = None,
+    versioned: bool = False,
+) -> Path:
+    logger = logger or logging.getLogger("nvm_generator")
+
+    if not versioned and version is None:
+        generator = NvMGenerator(
+            blocks=blocks,
+            previous_document=previous_document,
+            allow_update=allow_update,
+            logger=logger,
+        )
+        generator.generate(output)
+        return Path(output) / "NvM.arxml"
+
+    if version is None:
+        raise ValueError("A version profile is required when versioned generation is enabled.")
+
+    if previous_document is not None:
+        resolver = NvMGenerator(
+            blocks=blocks,
+            previous_document=previous_document,
+            allow_update=allow_update,
+            logger=logger,
+        )
+        resolved_blocks = resolver.resolve_blocks()
+    else:
+        resolved_blocks = list(blocks)
+        validate_blocks(resolved_blocks, version=version)
+
+    out_dir = Path(output)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    generator = NvMGenerator(
+        blocks=resolved_blocks,
+        previous_document=None,
+        allow_update=False,
+        logger=logger,
+    )
+    versioned_arxml_generator = VersionedArxmlGenerator(version, logger=logger)
+    rendered = versioned_arxml_generator.render(resolved_blocks)
+    if previous_document is not None:
+        rendered = _preserve_non_nvm_modules(rendered, previous_document, version.namespace)
+    header = generator.render_header(resolved_blocks)
+    source = generator.render_source(resolved_blocks)
+
+    header_file = out_dir / "NvM_Cfg.h"
+    source_file = out_dir / "NvM_Cfg.c"
+    arxml_file = out_dir / "NvM.arxml"
+
+    header_file.write_text(header, encoding="utf-8", newline="\n")
+    source_file.write_text(source, encoding="utf-8", newline="\n")
+    arxml_file.write_text(rendered, encoding="utf-8", newline="\n")
+
+    logger.info("Written versioned header to %s", header_file)
+    logger.info("Written versioned source to %s", source_file)
+    logger.info("Written versioned ARXML to %s", arxml_file)
+
+    return arxml_file
+
+
+def _preserve_non_nvm_modules(
+    rendered_arxml: str,
+    previous_document: ParsedArxmlDocument,
+    namespace: str,
+) -> str:
+    root = ET.fromstring(rendered_arxml)
+    elements = _find_first_child_by_local_name(root, "ELEMENTS")
+    if elements is None:
+        return rendered_arxml
+
+    preserved_modules = []
+    for element in previous_document.root.iter():
+        if NvMGenerator._local_name(element.tag) != "ECUC-MODULE-CONFIGURATION-VALUES":
+            continue
+        definition_ref = NvMGenerator._find_direct_child(element, "DEFINITION-REF")
+        if definition_ref is not None and (definition_ref.text or "").strip() == NVM_MODULE_DEFINITION_REF:
+            continue
+        preserved_modules.append(deepcopy(element))
+
+    for module in preserved_modules:
+        _retag_namespace(module, namespace)
+        elements.insert(0, module)
+
+    ET.register_namespace("", namespace)
+    ET.register_namespace("xsi", AUTOSAR_XSI_NAMESPACE)
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    return ET.tostring(root, encoding="utf-8", xml_declaration=True).decode("utf-8") + "\n"
+
+
+def _find_first_child_by_local_name(root: ET.Element, local_name: str) -> ET.Element | None:
+    for element in root.iter():
+        if NvMGenerator._local_name(element.tag) == local_name:
+            return element
+    return None
+
+
+def _retag_namespace(element: ET.Element, namespace: str) -> None:
+    if isinstance(element.tag, str):
+        element.tag = f"{{{namespace}}}{NvMGenerator._local_name(element.tag)}"
+    for child in element:
+        _retag_namespace(child, namespace)

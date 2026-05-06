@@ -1,0 +1,71 @@
+name: CI — Build & Test
+
+on:
+  push:
+    branches: ["Build_Artifacts"]
+  pull_request:
+    branches: ["Build_Artifacts"]
+  workflow_dispatch:          # allows manual trigger from GitHub UI
+
+# ── Configure your paths here ────────────────────────────────────────────────
+# RELEASE_DIR  : folder your build_exe.ps1 writes ALL output into
+# EXE_PATH     : exact path to the .exe inside that folder
+# Change these two lines and nothing else needs to touch paths.
+env:
+  RELEASE_DIR: .
+  EXE_PATH:    release/tool/NvMAutomationTool.exe
+
+jobs:
+  build-and-test:
+    name: Build, Test & Package
+    runs-on: windows-latest   # required — Makefile uses PowerShell and .ps1 scripts
+
+    defaults:
+      run:
+        shell: pwsh            # use PowerShell Core for all steps
+
+    steps:
+      # ── 1. Source ────────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Python ────────────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"               # caches pip download cache between runs
+
+      # ── 3. Dependencies ──────────────────────────────────────────────────────
+      - name: Install dependencies
+        run: make install
+
+      # ── 4. Test ──────────────────────────────────────────────────────────────
+      - name: Run unit tests
+        run: make test
+
+      # ── 5. Build executable ──────────────────────────────────────────────────
+      - name: Build executable
+        run: make build
+
+      # ── 6. Upload bare EXE ───────────────────────────────────────────────────
+      - name: Upload EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nvm-tool-exe-${{ github.run_number }}
+          path: ${{ env.EXE_PATH }}
+          retention-days: 30
+          if-no-files-found: error
+
+      # ── 7. Clean workspace ───────────────────────────────────────────────────
+      - name: Clean workspace
+        run: make clean
+
+      # ── 8. Upload zipped PVER ─────────────────────────────────────────────
+      - name: Upload zipped PVER
+        uses: actions/upload-artifact@v4
+        with:
+          name: PVER-${{ github.run_number }}
+          path: ${{ env.RELEASE_DIR }}
+          retention-days: 30
+          if-no-files-found: error

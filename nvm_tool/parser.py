@@ -9,10 +9,12 @@ from xml.etree import ElementTree as ET
 from .models import (
     AUTOSAR_NAMESPACE,
     NVM_BLOCK_CONTAINER_DEFINITION_REF,
+    NVM_BLOCK_WRITE_PROT_DEFINITION_REF,
     NVM_MODULE_DEFINITION_REF,
     NvMBlock,
     ParsedArxmlDocument,
 )
+from .transformers import NvMBlockTransformer
 
 
 class NvMConfigParser:
@@ -146,7 +148,7 @@ class NvMConfigParser:
             raise ValueError("Previous ARXML contains an NvM block container without SHORT-NAME.")
 
         parameter_values = self._extract_parameter_values(container, short_name)
-        return NvMBlock.from_arxml_values(short_name, parameter_values)
+        return NvMBlockTransformer.from_arxml_container(short_name, parameter_values)
 
     def _extract_parameter_values(
         self,
@@ -178,6 +180,22 @@ class NvMConfigParser:
 
             parameter_values[definition_ref_text] = (value_element.text or "").strip()
 
+        write_protection = next(
+            (
+                element
+                for element in container.iter()
+                if self._local_name(element.tag) == "WRITE-PROTECTION"
+            ),
+            None,
+        )
+        if (
+            write_protection is not None
+            and NVM_BLOCK_WRITE_PROT_DEFINITION_REF not in parameter_values
+        ):
+            parameter_values[NVM_BLOCK_WRITE_PROT_DEFINITION_REF] = (
+                write_protection.text or ""
+            ).strip()
+
         return parameter_values
 
     def _find_nvm_module_configurations(self, root: ET.Element) -> List[ET.Element]:
@@ -199,7 +217,7 @@ class NvMConfigParser:
             raise ValueError(f"Record {index} is missing required fields: {', '.join(missing)}")
 
         try:
-            return NvMBlock.from_mapping(record)
+            return NvMBlockTransformer.from_input_record(record)
         except Exception as exc:  # noqa: BLE001
             raise ValueError(f"Invalid NvM block in record {index}: {exc}") from exc
 

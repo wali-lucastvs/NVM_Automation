@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" elementFormDefault="qualified">
+  <xs:element name="AUTOSAR">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="AR-PACKAGES" minOccurs="0" maxOccurs="1">
+          <xs:complexType>
+            <xs:sequence>
+              <xs:element name="AR-PACKAGE" minOccurs="0" maxOccurs="unbounded">
+                <xs:complexType>
+                  <xs:sequence>
+                    <xs:element name="SHORT-NAME" type="xs:string"/>
+                    <xs:element name="ELEMENTS" minOccurs="0" maxOccurs="1">
+                      <xs:complexType>
+                        <xs:sequence>
+                          <xs:element name="ECUC-MODULE-CONFIGURATION-VALUES" minOccurs="0" maxOccurs="1">
+                            <xs:complexType>
+                              <xs:sequence>
+                                <xs:element name="DEFINITION-REF" type="xs:string" minOccurs="0" />
+                                <xs:element name="CONTAINERS" minOccurs="0">
+                                  <xs:complexType>
+                                    <xs:sequence>
+                                      <xs:element name="ECUC-CONTAINER-VALUE" minOccurs="0" maxOccurs="unbounded">
+                                        <xs:complexType>
+                                          <xs:sequence>
+                                            <xs:element name="SHORT-NAME" type="xs:string"/>
+                                            <xs:element name="DEFINITION-REF" type="xs:string" minOccurs="0"/>
+                                            <xs:element name="PARAMETER-VALUES" minOccurs="0">
+                                              <xs:complexType>
+                                                <xs:sequence>
+                                                  <xs:choice minOccurs="0" maxOccurs="unbounded">
+                                                    <xs:element name="ECUC-NUMERICAL-PARAM-VALUE">
+                                                      <xs:complexType>
+                                                        <xs:sequence>
+                                                          <xs:element name="DEFINITION-REF" type="xs:string" minOccurs="0"/>
+                                                          <xs:element name="VALUE" type="xs:string" minOccurs="0"/>
+                                                        </xs:sequence>
+                                                      </xs:complexType>
+                                                    </xs:element>
+                                                    <xs:element name="ECUC-TEXTUAL-PARAM-VALUE">
+                                                      <xs:complexType>
+                                                        <xs:sequence>
+                                                          <xs:element name="DEFINITION-REF" type="xs:string" minOccurs="0"/>
+                                                          <xs:element name="VALUE" type="xs:string" minOccurs="0"/>
+                                                        </xs:sequence>
+                                                      </xs:complexType>
+                                                    </xs:element>
+                                                  </xs:choice>
+                                                </xs:sequence>
+                                              </xs:complexType>
+                                            </xs:element>
+                                          </xs:sequence>
+                                        </xs:complexType>
+                                      </xs:element>
+                                    </xs:sequence>
+                                  </xs:complexType>
+                                </xs:element>
+                              </xs:sequence>
+                            </xs:complexType>
+                          </xs:element>
+                        </xs:sequence>
+                      </xs:complexType>
+                    </xs:element>
+                  </xs:sequence>
+                </xs:complexType>
+              </xs:element>
+            </xs:sequence>
+          </xs:complexType>
+        </xs:element>
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+</xs:schema>
